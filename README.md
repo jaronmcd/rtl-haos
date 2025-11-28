@@ -1,30 +1,72 @@
 # RTL-HAOS: RTL-433 to Home Assistant Bridge
 
+![Python Version](https://img.shields.io/badge/python-3.7%2B-blue)
+![Home Assistant](https://img.shields.io/badge/Home%20Assistant-MQTT-orange)
+![License](https://img.shields.io/badge/license-MIT-green)
 
-This project turns one or more RTL-SDR dongles into a Home Assistant-friendly sensor bridge. It also acts as a **System Monitor**, reporting the host machine's CPU, RAM, Disk, and Temperature stats to Home Assistant.
+A "drop-in" bridge that turns one or more **RTL-SDR dongles** into Home Assistant-friendly sensors via MQTT. 
 
-It:
+Unlike standard `rtl_433` scripts, this project captures **detailed signal metrics** (RSSI, SNR, Noise) for every received packet, allowing you to troubleshoot interference and optimize antenna placement directly from Home Assistant. 
 
-- Runs `rtl_433` and parses its JSON output
-- Normalizes and flattens sensor data
-- Optionally averages/buffers readings to reduce noise
-- Publishes everything to an MQTT broker using **Home Assistant MQTT Discovery**
-- Publishes **system/bridge diagnostics** (CPU, RAM, disk, host model, IP, device list)
+It also functions as a **System Monitor**, reporting the host machine's health (CPU, RAM, Disk, Temp) and the live status of the radio dongle itself, giving you a complete view of your hardware's performance in one place.
 
-The goal is a “drop-in” bridge: plug in RTL-SDR(s), run this script, and watch devices appear in Home Assistant with clean names, units, and icons.
+---
 
 ## ✨ Features
 
-* **MQTT Auto-Discovery:** Sensors appear automatically in Home Assistant without manual YAML configuration.
-* **Field metadata**: units, device_class, icons, friendly names (for HA) 
-* **System monitor**:
-  - CPU %, RAM %, disk %, CPU temp, script memory
-  - Bridge uptime, OS version, model, IP
-  - Count/list of active RF devices
-* **Dew point calculation** derived from temperature + humidity
-* **Filtering:** Built-in Whitelist and Blacklist support to ignore neighbor's sensors.
-* **Multi-Radio Support:** Can manage multiple SDR dongles on different frequencies simultaneously.
-* **Data Averaging:** Buffers and averages sensor readings over a set interval (e.g., 30s) to reduce database noise.
+* **Zero-Config Discovery:** Sensors appear automatically in Home Assistant (via MQTT Discovery) with correct units, icons, and friendly names.
+* **Signal Diagnostics:** Reports **RSSI, SNR, and Noise Floor** for every device, making it easy to identify weak signals, plot coverage ranges, or hunt down interference sources.
+* **Smart System Monitor:**
+    * Reports Host CPU, RAM, Disk, and Temperature.
+    * **Live Radio Status:** Reports if the SDR is "Online," "Scanning," or "Disconnected" (grouped with the host device).
+* **Native Graphing:** All sensors utilize Home Assistant's `measurement` state class, enabling automatic, long-term historical graphing of temperature, humidity, and system resources.
+* **Noise Reduction:**
+    * **Data Averaging:** Buffers readings (e.g., every 30s) to prevent database bloat from sensors that spam updates every second.
+    * **Filtering:** Built-in Whitelist and Blacklist support to ignore your neighbor's tire pressure sensors.
+* **Advanced Data:**
+    * **Dew Point:** Automatically calculated from Temp + Humidity sensors.
+    * **Multi-Radio Support:** Run multiple dongles on different frequencies simultaneously.
+
+---
+
+## 🧩 How It Works
+
+```mermaid
+graph TD
+    subgraph "RF Devices (Airwaves)"
+        A[Weather Station] -->|433.92 MHz| D[Antenna]
+        B[Tire Sensor] -->|315 MHz| D
+        C[Utility Meter] -->|915 MHz| D
+    end
+
+    subgraph "Host Machine (Raspberry Pi/Linux)"
+        D[RTL-SDR Dongle] -->|USB Signal| E[rtl_433 Binary]
+        E -->|Raw JSON| F("<b>RTL-HAOS Bridge</b><br/>(This Software)")
+        
+        subgraph "System Stats"
+            H[CPU/RAM] --> F
+            I[Disk/Temp] --> F
+        end
+
+        F -->|Filtered & Formatted JSON| G[MQTT Broker]
+    end
+
+    subgraph "Home Assistant"
+        G -->|MQTT Auto-Discovery| J[Sensor Entities]
+        G -->|Diagnostic Data| K[System Monitor]
+    end
+    
+    style F fill:#f96,stroke:#333,stroke-width:2px,color:black
+    style J fill:#5fb,stroke:#333,stroke-width:1px,color:black
+```
+
+---
+
+## 📸 Screenshots
+
+| Device View | System Monitor |
+|:---:|:---:|
+| *[Insert screenshot of a Weather Sensor in HA]* | *[Insert screenshot of the System/Radio Status device]* |
 
 ---
 
@@ -62,7 +104,7 @@ sudo apt install -y rtl-433 git python3 python3-pip python3-venv libatlas-base-d
 
 ### 2. Clone & Setup
 ```bash
-git clone https://github.com/jaronmcd/rtl-haos.git
+git clone [https://github.com/jaronmcd/rtl-haos.git](https://github.com/jaronmcd/rtl-haos.git)
 cd rtl-haos
 
 # Create and activate virtual environment
@@ -165,5 +207,14 @@ To keep the bridge running 24/7, use `systemd`.
     sudo systemctl start rtl-bridge.service
     ```
 
+---
 
+## ❓ Troubleshooting
 
+* **"No Device Found" in Logs:**
+    * The script cannot see your USB stick. 
+    * Run `lsusb` to verify it is plugged in.
+    * Ensure you are not running another instance of `rtl_433` in the background.
+* **"Kernel driver is active" Error:**
+    * Linux loaded the default TV tuner driver. You need to blacklist it.
+    * Run: `echo "blacklist dvb_usb_rtl28xxu" | sudo tee /etc/modprobe.d/blacklist-rtl.conf` and reboot.
