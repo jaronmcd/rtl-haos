@@ -229,6 +229,8 @@ Before modifying your hardware, it is good practice to dump the current EEPROM i
 
 > **Restoration:** If you ever need to restore the backup, use: `rtl_eeprom -w original_backup.bin`
 
+---
+
 ## 🤖 Running as a Service
 
 To keep the bridge running 24/7, use `systemd`.
@@ -240,39 +242,61 @@ To keep the bridge running 24/7, use `systemd`.
 
 2.  **Paste the configuration** (Update paths to match your username!):
     ```ini
-    [Unit]
-    Description=RTL-HAOS MQTT Bridge
-    After=network.target
-
-    [Service]
-    Type=simple
-    User=pi
-    # UPDATE THIS PATH
-    WorkingDirectory=/home/pi/rtl-haos
-    # UPDATE THIS PATH (use python or python3 depending on your venv)
-    ExecStart=/home/pi/rtl-haos/venv/bin/python3 /home/pi/rtl-haos/rtl_mqtt_bridge.py
-    Restart=always
-    RestartSec=10
-
-    [Install]
-    WantedBy=multi-user.target
+      [Unit]
+      Description=RTL-HAOS MQTT Bridge
+      # Wait for the network to have a valid IP address before starting
+      Wants=network-online.target
+      After=network-online.target
+      
+      [Service]
+      Type=simple
+      # CHANGE THIS to your username (e.g., pi, user, admin)
+      User=pi
+      # CHANGE THIS to your directory path
+      WorkingDirectory=/home/pi/rtl-haos
+      
+      # Unbuffer output so logs show up immediately
+      Environment=PYTHONUNBUFFERED=1
+      
+      # Wait 10 seconds before starting to ensure USB device is ready
+      ExecStartPre=/bin/sleep 10
+      
+      # CHANGE THESE PATHS to match your virtual environment and script location
+      ExecStart=/home/pi/rtl-haos/venv/bin/python3 /home/pi/rtl-haos/rtl_mqtt_bridge.py
+      
+      # Restart automatically if it crashes
+      Restart=on-failure
+      RestartSec=5
+      # Infinite restart attempts (do not stop trying)
+      StartLimitIntervalSec=0
+      
+      [Install]
+      WantedBy=multi-user.target
     ```
 
 3.  **Enable and Start:**
     ```bash
-    sudo systemctl daemon-reload
-    sudo systemctl enable rtl-bridge.service
-    sudo systemctl start rtl-bridge.service
+      sudo systemctl daemon-reload
+      sudo systemctl enable rtl-bridge.service
+      sudo systemctl start rtl-bridge.service
     ```
 
+4.  **Check Status:**
+    ```bash
+      systemctl status rtl-bridge.service
+    ```
 ---
 
 ## ❓ Troubleshooting
-
+* **"Service Fails to Start (Exit Code Error)**
+    * Check your username in the service file. If your terminal says user@hostname, your User= line must be user, not pi
+    * Verify paths. Run ls /home/YOUR_USER/rtl-haos to make sure the folder exists.
+    * Check the logs: journalctl -u rtl-bridge.service -b
 * **"No Device Found" in Logs:**
     * The script cannot see your USB stick. 
     * Run `lsusb` to verify it is plugged in.
     * Ensure you are not running another instance of `rtl_433` in the background.
+    * The ExecStartPre=/bin/sleep 10 line in the service file usually fixes this by waiting for the USB to wake up on reboot.
 * **"Kernel driver is active" Error:**
     * Linux loaded the default TV tuner driver. You need to blacklist it.
     * Run: `echo "blacklist dvb_usb_rtl28xxu" | sudo tee /etc/modprobe.d/blacklist-rtl.conf` and reboot.
