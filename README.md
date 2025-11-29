@@ -38,30 +38,47 @@ https://github.com/merbanan/rtl_433
 ```mermaid
 graph TD
     subgraph "RF Devices (Airwaves)"
-        A[Weather Station] -->|433.92 MHz| D[Antenna]
-        B[Motion Sensor] -->|315 MHz| D
-        C[Utility Meter] -->|915 MHz| D
+        A(<b>Weather Station</b>) -->|433.92 MHz| D(<b>Antenna</b>)
+        B(<b>Motion Sensor</b>) -->|315 MHz| D
+        C(<b>Utility Meter</b>) -->|915 MHz| D
     end
 
     subgraph "Host Machine (Raspberry Pi/Linux)"
-        D[RTL-SDR Dongle] -->|USB Signal| E[rtl_433 Binary]
+        D(<b>RTL-SDR Dongle</b>) -->|USB Signal| E(<b>rtl_433 Binary</b>)
         E -->|Raw JSON| F("<b>RTL-HAOS Bridge</b><br/>(This Software)")
         
         subgraph "System Stats"
-            H[CPU/RAM] --> F
-            I[Disk/Temp] --> F
+            H(<b>CPU/RAM</b>) --> F
+            I(<b>Disk/Temp</b>) --> F
         end
-
-        F -->|Filtered & Formatted JSON| G[MQTT Broker]
     end
+
+    %% MQTT Broker
+    F -->|Filtered & Formatted JSON| G("<b>MQTT Broker</b><br/>(External or HAOS Add-on)")
 
     subgraph "Home Assistant"
-        G -->|MQTT Auto-Discovery| J[Sensor Entities]
-        G -->|Diagnostic Data| K[System Monitor]
+        G -->|MQTT Auto-Discovery| J(<b>Sensor Entities</b>)
+        G -->|Diagnostic Data| K(<b>System Monitor</b>)
     end
     
-    style F fill:#f96,stroke:#333,stroke-width:2px,color:black
-    style J fill:#5fb,stroke:#333,stroke-width:1px,color:black
+    %% STYLING
+    
+    %% RTL Bridge (Orange)
+    style F fill:#f96,stroke:#333,stroke-width:4px,color:black,rx:10,ry:10
+    
+    %% MQTT Broker (Blue)
+    style G fill:#bbdefb,stroke:#0d47a1,stroke-width:4px,color:black,rx:10,ry:10
+    
+    %% Sensor Entities (Green)
+    style J fill:#5fb,stroke:#333,stroke-width:2px,color:black,rx:10,ry:10
+    
+    %% System Monitor (Gray)
+    style K fill:#cfd8dc,stroke:#333,stroke-width:2px,color:black,rx:10,ry:10
+    
+    %% Input Devices (White)
+    style A fill:#fff,stroke:#333,stroke-width:2px,color:black,rx:5,ry:5
+    style B fill:#fff,stroke:#333,stroke-width:2px,color:black,rx:5,ry:5
+    style C fill:#fff,stroke:#333,stroke-width:2px,color:black,rx:5,ry:5
 ```
 
 ---
