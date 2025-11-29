@@ -35,7 +35,7 @@ It also functions as a **System Monitor**, reporting the host machine's health (
 graph TD
     subgraph "RF Devices (Airwaves)"
         A[Weather Station] -->|433.92 MHz| D[Antenna]
-        B[Tire Sensor] -->|315 MHz| D
+        B[Motion Sensor] -->|315 MHz| D
         C[Utility Meter] -->|915 MHz| D
     end
 
