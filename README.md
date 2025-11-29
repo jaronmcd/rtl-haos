@@ -39,7 +39,7 @@ graph TD
         C(<b>Utility Meter</b>) -->|915 MHz| D
     end
 
-    subgraph "Host Machine (Raspberry Pi/Linux)"
+    subgraph "Host (Raspberry Pi / Linux)"
         D(<b>RTL-SDR Dongle</b>) -->|USB Signal| E(<b>rtl_433 Binary</b>)
         E -->|Raw JSON| F("<b>RTL-HAOS Bridge</b><br/>(This Software)")
         
