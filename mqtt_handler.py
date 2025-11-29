@@ -5,6 +5,7 @@ DESCRIPTION:
   Manages the connection to the MQTT Broker.
   - UPDATED: Support for custom friendly names (e.g. "Weather Radio Status").
 """
+import time
 import json
 import threading
 import sys
@@ -29,7 +30,8 @@ class HomeNodeMQTT:
         self.tracked_devices = set()
         
         self.discovery_lock = threading.Lock()
-
+        self.last_seen_timestamps = {}  # <--- NEW: Track time of last packet
+        self.discovery_topics = {}      # <--- NEW: Map Unique ID to Config Topic
     def _on_connect(self, c, u, f, rc, p=None):
         if rc == 0:
             c.publish(self.TOPIC_AVAILABILITY, "online", retain=True)
@@ -122,6 +124,7 @@ class HomeNodeMQTT:
             payload["availability_topic"] = self.TOPIC_AVAILABILITY
 
             config_topic = f"homeassistant/sensor/{unique_id}/config"
+            self.discovery_topics[unique_id] = config_topic # <--- NEW: Save topic
             self.client.publish(config_topic, json.dumps(payload), retain=True)
             self.discovery_published.add(unique_id)
 
@@ -140,6 +143,7 @@ class HomeNodeMQTT:
 
         unique_id = f"{unique_id_base}_{field}"
         state_topic = f"home/rtl_devices/{state_topic_base}/{field}" 
+        self.last_seen_timestamps[unique_id] = time.time() # <--- NEW: Update timestamp
 
         self._publish_discovery(field, state_topic, unique_id, device_name, device_model, friendly_name_override=friendly_name)
 
@@ -153,3 +157,37 @@ class HomeNodeMQTT:
             
             if value_changed:
                 print(f" -> TX {device_name} [{field}]: {value}")
+
+# --- NEW FUNCTION ---
+    def prune_stale_devices(self, timeout_seconds=3600):
+        """
+        Checks for devices that haven't been seen in 'timeout_seconds'.
+        Removes them from Home Assistant and internal tracking.
+        """
+        now = time.time()
+        to_delete = []
+
+        # 1. Identify Stale Devices
+        for unique_id, last_seen in self.last_seen_timestamps.items():
+            if (now - last_seen) > timeout_seconds:
+                to_delete.append(unique_id)
+
+        # 2. Delete them
+        for uid in to_delete:
+            print(f"[CLEANUP] Removing stale entity: {uid}")
+            
+            # A. Send Empty Payload to MQTT Config Topic (Tells HA to delete)
+            if uid in self.discovery_topics:
+                topic = self.discovery_topics[uid]
+                self.client.publish(topic, "", retain=True) 
+                del self.discovery_topics[uid]
+
+            # B. Clear internal tracking so it re-discovers if it returns
+            with self.discovery_lock:
+                if uid in self.discovery_published:
+                    self.discovery_published.remove(uid)
+            
+            if uid in self.last_seen_values:
+                del self.last_seen_values[uid]
+                
+            del self.last_seen_timestamps[uid]

@@ -16,6 +16,14 @@ import socket
 import statistics 
 from rich import print
 
+def cleanup_loop(mqtt_handler):
+    """
+    Runs every 60 seconds to check for devices older than 1 hour (3600s).
+    """
+    while True:
+        time.sleep(60)
+        # Set your desired timeout here (e.g., 3600 seconds = 1 hour)
+        mqtt_handler.prune_stale_devices(timeout_seconds=3600)
 
 # --- PRE-FLIGHT DEPENDENCY CHECK ---
 def check_dependencies():
@@ -355,7 +363,8 @@ def main():
 
     # --- 4. START THROTTLE FLUSHER ---
     threading.Thread(target=throttle_flush_loop, args=(mqtt_handler,), daemon=True).start()
-
+    
+    threading.Thread(target=cleanup_loop, args=(mqtt_handler,), daemon=True).start()
     try:
         while True: time.sleep(1)
     except KeyboardInterrupt:
