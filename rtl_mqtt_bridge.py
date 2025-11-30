@@ -5,6 +5,7 @@ DESCRIPTION:
   The main executable script.
   - FINAL VER: Synched System Logs, Electric Blue Debug, Glitch-Free Dashboard.
 """
+import re # <--- Add this with your other imports
 import subprocess
 import json
 import time
@@ -60,15 +61,57 @@ def log_system_event(tag, message):
 
 def log_debug_packet(radio_name, raw_json_str):
     """
-    Prints a raw JSON packet in high-contrast white with Cyan label.
+    Prints a raw JSON packet with 'Tron' styling using a Placeholder strategy.
+    This prevents the regex from breaking the rich tags.
     """
     timestamp = datetime.now().strftime("%H:%M:%S")
-    console.print(
-        f"[{timestamp}] 🐛 [bold deep_sky_blue1]{radio_name:<25}[/bold deep_sky_blue1] "
-        f"| [bold cyan]RAW[/bold cyan]                : "
-        f"[bold white]{raw_json_str}[/bold white]"
+    s = raw_json_str
+    
+    # 1. HIDE structural punctuation (Replace with temporary placeholders)
+    #    We do this so our styling tags don't get messed up later.
+    s = s.replace('{', '§OB§').replace('}', '§CB§')
+    s = s.replace('[', '§LB§').replace(']', '§RB§')
+    s = s.replace(',', '§CM§')
+
+    # 2. Format KEYS (White)
+    #    Target: "key":
+    #    We use [dim] tags here, but they are safe because we hid the real brackets above.
+    s = re.sub(
+        r'"([^"]+)"\s*:', 
+        r'[dim]"[/dim][bold white]\1[/bold white][dim]":[/dim]', 
+        s
+    )
+    
+    # 3. Format VALUES (String) (Cyan)
+    #    Target: [dim]":[/dim] "value"
+    s = re.sub(
+        r'(\[dim\]":\[/dim\]\s*)"([^"]+)"', 
+        r'\1[dim]"[/dim][bold cyan]\2[/bold cyan][dim]"[/dim]', 
+        s
+    )
+    
+    # 4. Format VALUES (Number/Bool) (Cyan)
+    #    Target: [dim]":[/dim] 123
+    s = re.sub(
+        r'(\[dim\]":\[/dim\]\s*)([0-9.-]+|true|false|null)', 
+        r'\1[bold cyan]\2[/bold cyan]', 
+        s
     )
 
+    # 5. RESTORE structural punctuation (with Dim styling)
+    #    Now we turn the placeholders back into real brackets.
+    s = s.replace('§OB§', '[dim]{[/dim]').replace('§CB§', '[dim]}[/dim]')
+    s = s.replace('§LB§', '[dim][[/dim]').replace('§RB§', '[dim]][/dim]')
+    s = s.replace('§CM§', '[dim],[/dim]')
+
+    # Print
+    console.print(
+        f"[dim]\[[/dim]{timestamp}[dim]][/dim] 🐛 [bold deep_sky_blue1]{radio_name:<25}[/bold deep_sky_blue1] "
+        f"| [bold cyan]RAW[/bold cyan]                : "
+        f"{s}"
+    )
+
+    
 # ---------------- DASHBOARD ----------------
 def get_dashboard_layout(sys_id, sys_model, frame=0):
     logo_lines = [

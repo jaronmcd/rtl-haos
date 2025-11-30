@@ -3,7 +3,7 @@
 FILE: mqtt_handler.py
 DESCRIPTION:
   Manages the connection to the MQTT Broker.
-  - UPDATED: Support for Rich Console logs and Electric Blue styling.
+  - FINAL VER: Electric Blue Names, Green Times, WHITE Values.
 """
 import json
 import threading
@@ -47,7 +47,6 @@ class HomeNodeMQTT:
     def _on_connect(self, c, u, f, rc):
         if rc == 0:
             c.publish(self.TOPIC_AVAILABILITY, "online", retain=True)
-            # We don't print here to avoid glitching the startup dashboard
         else:
             console.print(f"[bold red][MQTT] Connection Failed! Code: {rc}[/bold red]")
 
@@ -66,8 +65,6 @@ class HomeNodeMQTT:
 
     def _publish_discovery(self, sensor_name, state_topic, unique_id, device_name, device_model, friendly_name_override=None):
         unique_id = f"{unique_id}{config.ID_SUFFIX}"
-        
-        # Save topic for auto-removal later
         config_topic = f"homeassistant/sensor/{unique_id}/config"
         self.discovery_topics[unique_id] = config_topic
 
@@ -76,8 +73,6 @@ class HomeNodeMQTT:
                 return
 
             default_meta = (None, "none", "mdi:eye", sensor_name.replace("_", " ").title())
-            
-            # --- 1. METADATA LOOKUP ---
             if sensor_name.startswith("radio_status"):
                 base_meta = FIELD_META.get("radio_status", default_meta)
             else:
@@ -88,7 +83,6 @@ class HomeNodeMQTT:
             except ValueError:
                 unit, device_class, icon, default_fname = default_meta
 
-            # --- 2. FRIENDLY NAME LOGIC ---
             if friendly_name_override:
                 friendly_name = friendly_name_override
             elif sensor_name.startswith("radio_status_"):
@@ -97,7 +91,6 @@ class HomeNodeMQTT:
             else:
                 friendly_name = default_fname
 
-            # --- 3. CATEGORIZATION LOGIC ---
             entity_cat = "diagnostic"
             if sensor_name in getattr(config, 'MAIN_SENSORS', []) or sensor_name.startswith("radio_status"):
                 entity_cat = None
@@ -141,7 +134,6 @@ class HomeNodeMQTT:
         state_topic = f"home/rtl_devices/{unique_id_base}/{field}" 
         unique_id = f"{unique_id_base}_{field}"
 
-        # Track Timestamp for Auto-Remove
         full_unique_id = f"{unique_id}{config.ID_SUFFIX}"
         self.last_seen_timestamps[full_unique_id] = time.time()
 
@@ -154,12 +146,11 @@ class HomeNodeMQTT:
             self.client.publish(state_topic, str(value), retain=True)
             self.last_sent_values[unique_id_v2] = value
             
-            # --- CALL THE NEW LOGGING FUNCTION ---
             if value_changed:
                 self._print_log(device_name, field, value, is_rtl)
 
     def _print_log(self, device_name, field, value, is_rtl):
-        """Prints a pretty log line with timestamp and units."""
+        """Prints a pretty log line with Green timestamp, Blue Name, White Field, White Value."""
         
         # 1. Get Unit for display
         meta = FIELD_META.get(field)
@@ -173,10 +164,10 @@ class HomeNodeMQTT:
         timestamp = datetime.now().strftime("%H:%M:%S")
         
         if is_rtl:
-            # Radio Signal (Electric Blue to match Dashboard)
+            # Radio Signal
             icon = "📡"
-            color_dev = "bold deep_sky_blue1"
-            color_val = "bold green"
+            color_dev = "bold deep_sky_blue1" # Electric Blue Name
+            color_val = "bold white"          # Bright White Value
         else:
             # System Stat (Dim/Background)
             icon = "🖥️ "
@@ -184,9 +175,10 @@ class HomeNodeMQTT:
             color_val = "dim white"
 
         # 3. Print aligned columns
+        # UPDATED: Added [bold white] around the field name so it pops out.
         console.print(
-            f"[{timestamp}] {icon} [{color_dev}]{device_name:<25}[/{color_dev}] "
-            f"| {field:<18} : [{color_val}]{display_val}[/{color_val}]"
+            f"[[green]{timestamp}[/green]] {icon} [{color_dev}]{device_name:<25}[/{color_dev}] "
+            f"| [bold white]{field:<18}[/bold white] : [{color_val}]{display_val}[/{color_val}]"
         )
 
     def prune_stale_devices(self):
@@ -201,7 +193,6 @@ class HomeNodeMQTT:
             if (now - last_seen) > purge_interval:
                 to_delete.append(uid)
 
-        # Only print a header if we actually have something to delete
         if to_delete:
             console.rule(f"[yellow]Executing Purge: {len(to_delete)} Devices[/yellow]")
             
