@@ -3,7 +3,7 @@
 FILE: rtl_mqtt_bridge.py
 DESCRIPTION:
   The main executable script.
-  - UPDATED: Groups "Radio Status" under the main System/Computer device.
+  - FINAL VER: Synched System Logs, Electric Blue Debug, Glitch-Free Dashboard.
 """
 import subprocess
 import json
@@ -14,32 +14,28 @@ import importlib.util
 import fnmatch
 import socket
 import statistics 
-import version # <--- NEW IMPORT
+from datetime import datetime
+import version
+from rich.live import Live
+from collections import deque
+from rich.console import Group
 from rich import print
+from rich.console import Console
+from rich.table import Table
+from rich.panel import Panel
+from rich import box
+from rich.syntax import Syntax
+from rich.text import Text
 
-def purge_loop(mqtt_handler):
-    """
-    Checks every 60 seconds if we need to purge old devices.
-    """
-    print("[STARTUP] Auto-Remove / Purge Loop started.")
-    while True:
-        time.sleep(60)
-        try:
-            mqtt_handler.prune_stale_devices()
-        except Exception as e:
-            print(f"[ERROR] Purge loop failed: {e}")
+console = Console()
 
 # --- PRE-FLIGHT DEPENDENCY CHECK ---
 def check_dependencies():
-    # 1. Check for the rtl_433 binary (System Dependency)
     if not subprocess.run(["which", "rtl_433"], capture_output=True).stdout:
-        print("CRITICAL: 'rtl_433' binary not found. Please install it (e.g., sudo apt install rtl-433).")
+        print("CRITICAL: 'rtl_433' binary not found. Please install it.")
         sys.exit(1)
-
-    # 2. Check for Paho MQTT (Python Dependency)
     if importlib.util.find_spec("paho") is None:
         print("CRITICAL: Python dependency 'paho-mqtt' not found.")
-        print("Please install requirements: pip install -r requirements.txt")
         sys.exit(1)
 
 check_dependencies()
@@ -55,7 +51,73 @@ from system_monitor import system_stats_loop
 DATA_BUFFER = {} 
 BUFFER_LOCK = threading.Lock()
 
-# ---------------- HELPERS ----------------
+# ---------------- LOGGING HELPERS (THE MISSING PIECE) ----------------
+
+def log_system_event(tag, message):
+    """Prints a system log (THROTTLE, STARTUP, etc) with a Green Timestamp."""
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    console.print(f"[[green]{timestamp}[/green]] [bold green]{tag:<10}[/bold green] {message}")
+
+def log_debug_packet(radio_name, raw_json_str):
+    """
+    Prints a raw JSON packet in high-contrast white with Cyan label.
+    """
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    console.print(
+        f"[{timestamp}] 🐛 [bold deep_sky_blue1]{radio_name:<25}[/bold deep_sky_blue1] "
+        f"| [bold cyan]RAW[/bold cyan]                : "
+        f"[bold white]{raw_json_str}[/bold white]"
+    )
+
+# ---------------- DASHBOARD ----------------
+def get_dashboard_layout(sys_id, sys_model, frame=0):
+    logo_lines = [
+        r"██████╗ ████████╗██╗     ______ ██╗  ██╗ █████╗  ██████╗ ███████╗",
+        r"██╔══██╗╚══██╔══╝██║     ██████╗██║  ██║██╔══██╗██╔═══██╗██╔════╝",
+        r"██████╔╝   ██║   ██║     ╚═════╝███████║███████║██║   ██║███████╗",
+        r"██╔══██╗   ██║   ██║            ██╔══██║██╔══██║██║   ██║╚════██║",
+        r"██║  ██║   ██║   ███████╗       ██║  ██║██║  ██║╚██████╔╝███████║",
+        r"╚═╝  ╚═╝   ╚═╝   ╚══════╝       ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝",
+    ]
+    base_colors = ["#FF00FF", "#E011FF", "#C222FF", "#A333FF", "#8544FF", "#0088FF"]
+    
+    dq = deque(base_colors)
+    dq.rotate(frame) 
+    current_colors = list(dq)
+
+    gradient_logo = Text()
+    for line, color in zip(logo_lines, current_colors):
+        gradient_logo.append(line + "\n", style=color)
+
+    table = Table(box=box.SIMPLE, show_header=True, header_style="bold blue", expand=True)
+    table.add_column("Category", style="cyan", width=12)
+    table.add_column("Setting", style="dim white", width=20)
+    table.add_column("Value", style="bold white")
+
+    table.add_row("SYSTEM", "Device Model", sys_model)
+    table.add_row("", "System ID", sys_id)
+    table.add_row("MQTT", "Broker", f"{config.MQTT_SETTINGS['host']}")
+    table.add_section()
+    
+    radios = getattr(config, "RTL_CONFIG", [])
+    r_stat = f"[green]{len(radios)} Active[/green]" if radios else "[cyan]Auto-Detect[/cyan]"
+    table.add_row("RADIO", "Mode", r_stat)
+    
+    purge = getattr(config, "DEVICE_PURGE_INTERVAL", 0)
+    p_str = f"{purge/3600:.1f} Hours" if purge >= 3600 else (f"{purge}s" if purge > 0 else "[red]Disabled[/red]")
+    table.add_row("LOGIC", "Auto-Remove", p_str)
+
+    scan_status = "[bold yellow] SCANNING [/bold yellow]" if frame % 10 < 5 else "[dim yellow] SCANNING [/dim yellow]"
+    
+    return Panel(
+        Group(gradient_logo, table),
+        border_style="bold blue",
+        title="[bold blue] SYSTEM ONLINE [/bold blue]",
+        subtitle=f"[bold white]v{version.__version__}[/bold white] • {scan_status}",
+    )
+
+# ---------------- LOGIC ----------------
+
 def flatten(d, sep: str = "_") -> dict:
     obj = {}
     def recurse(t, parent: str = ""):
@@ -78,7 +140,6 @@ def is_blocked_device(clean_id: str, model: str) -> bool:
         if fnmatch.fnmatch(str(model), pattern): return True
     return False
 
-# ---------------- BUFFERING / DISPATCH ----------------
 def dispatch_reading(clean_id, field, value, dev_name, model, mqtt_handler):
     interval = getattr(config, "RTL_THROTTLE_INTERVAL", 0)
     if interval <= 0:
@@ -98,7 +159,8 @@ def throttle_flush_loop(mqtt_handler):
     interval = getattr(config, "RTL_THROTTLE_INTERVAL", 30)
     if interval <= 0: return
 
-    print(f"[THROTTLE] Averaging data every {interval} seconds.")
+    # UPDATED: Use log_system_event
+    log_system_event("[THROTTLE]", f"Averaging data every {interval} seconds.")
     while True:
         time.sleep(interval)
         with BUFFER_LOCK:
@@ -130,125 +192,69 @@ def throttle_flush_loop(mqtt_handler):
                 count_sent += 1
         
         if getattr(config, "DEBUG_RAW_JSON", False) and count_sent > 0:
-            print(f"[THROTTLE] Flushed {count_sent} averaged readings.")
+            # UPDATED: Use log_system_event
+            log_system_event("[THROTTLE]", f"Flushed {count_sent} averaged readings.")
 
 def discover_default_rtl_serial():
-    """
-    Try to read the serial number of the default RTL-SDR using rtl_eeprom.
-    Returns the serial string, or None if it can't be determined.
-    """
     try:
-        proc = subprocess.run(
-            ["rtl_eeprom"],
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-    except FileNotFoundError:
-        print("[STARTUP] rtl_eeprom not found; cannot auto-detect RTL-SDR serial.")
+        proc = subprocess.run(["rtl_eeprom"], capture_output=True, text=True, timeout=10)
+    except:
         return None
-    except Exception as e:
-        print(f"[STARTUP] Error running rtl_eeprom: {e}")
-        return None
-
     output = (proc.stdout or "") + (proc.stderr or "")
-    serial = None
-
     for line in output.splitlines():
-        line = line.strip()
-        # Typical lines contain "Serial number:" or "S/N:"
-        if "Serial number" in line or "serial number" in line or "S/N" in line:
+        if "Serial number" in line or "S/N" in line:
             parts = line.split(":", 1)
             if len(parts) == 2:
-                candidate = parts[1].strip()
-                if candidate:
-                    serial = candidate.split()[0]
-                    break
-
-    if serial:
-        return serial
-
-    print("[STARTUP] Could not parse RTL-SDR serial from rtl_eeprom output.")
+                return parts[1].strip().split()[0]
     return None
-# rtl_mqtt_bridge.py (Partial - replace only the rtl_loop function)
 
-def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_model: str) -> None:
-    # Radio Config
+def rtl_loop(radio_config, mqtt_handler, sys_id, sys_model, signal_event):
     device_id = radio_config.get("id", "0")
     frequency = radio_config.get("freq", "433.92M")
     radio_name = radio_config.get("name", f"RTL_{device_id}")
     sample_rate = radio_config.get("rate", "250k")
 
-    # --- Names & IDs ---
-    # The internal field name (used for topic/unique_id)
     status_field = f"radio_status_{device_id}"
-    
-    # The Friendly Name for Home Assistant (e.g. "Weather Radio Status")
     status_friendly_name = f"{radio_name}"
-
-    # System name (used for device grouping)
     sys_name = f"{sys_model} ({sys_id})"
 
-    # CMD
-    cmd = [
-        "rtl_433", "-d", f":{device_id}", "-f", frequency, "-s", sample_rate,
-        "-F", "json", "-M", "time:iso", "-M", "protocol", "-M", "level",
-    ]
+    cmd = ["rtl_433", "-d", f":{device_id}", "-f", frequency, "-s", sample_rate, "-F", "json", "-M", "time:iso", "-M", "protocol", "-M", "level"]
 
-    print(f"[RTL] Manager started for {radio_name}. Monitoring...")
+    # UPDATED: Use log_system_event
+    log_system_event("[RTL]", f"Manager started for {radio_name}. Monitoring...")
 
     while True:
-        # 1. Announce "Scanning" with custom Friendly Name
-        mqtt_handler.send_sensor(
-            sys_id, status_field, "Scanning...", sys_name, sys_model, 
-            is_rtl=True, friendly_name=status_friendly_name
-        )
+        mqtt_handler.send_sensor(sys_id, status_field, "Scanning...", sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
         time.sleep(2)
 
         proc = None
         try:
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-
             for line in proc.stdout:
                 if not line: continue
                 safe_line = line.strip()
 
-                # --- ERROR DETECTION ---
                 if "usb_open error" in safe_line or "No supported devices" in safe_line:
-                    print(f"[{radio_name}] Hardware missing!")
-                    mqtt_handler.send_sensor(
-                        sys_id, status_field, "No Device Found", sys_name, sys_model, 
-                        is_rtl=True, friendly_name=status_friendly_name
-                    )
+                    log_system_event("[ERROR]", f"[{radio_name}] Hardware missing!")
+                    mqtt_handler.send_sensor(sys_id, status_field, "No Device Found", sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
                 
-                elif "Kernel driver is active" in safe_line or "LIBUSB_ERROR_BUSY" in safe_line:
-                    print(f"[{radio_name}] USB Busy/Driver Error!")
-                    mqtt_handler.send_sensor(
-                        sys_id, status_field, "Error: USB Busy", sys_name, sys_model, 
-                        is_rtl=True, friendly_name=status_friendly_name
-                    )
-
-                # --- VALID DATA ---
                 if safe_line.startswith("{") and safe_line.endswith("}"):
                     try:
                         data = json.loads(safe_line)
-                        # STATUS UPDATE: Online
-                        mqtt_handler.send_sensor(
-                            sys_id, status_field, "Online", sys_name, sys_model, 
-                            is_rtl=True, friendly_name=status_friendly_name
-                        )
+                        
+                        if not signal_event.is_set():
+                            signal_event.set()
+                            time.sleep(3.0) # Morph wait
+
+                        mqtt_handler.send_sensor(sys_id, status_field, "Online", sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
                     except:
                         continue
 
-                    # --- SENSOR PROCESSING (Standard) ---
-                    # Note: We do NOT pass friendly_name here, because these are standard sensors
-                    # (Temperature, Humidity) that should use the default lookup logic.
                     model = data.get("model", "Generic")
                     sid = data.get("id") or data.get("channel") or "unknown"
                     clean_id = clean_mac(sid)
                     dev_name = f"{model} ({clean_id})"
 
-                    # Filtering
                     whitelist = getattr(config, "DEVICE_WHITELIST", [])
                     if whitelist:
                         is_allowed = False
@@ -261,9 +267,9 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
                         if is_blocked_device(clean_id, model): continue
 
                     if getattr(config, "DEBUG_RAW_JSON", False):
-                        print(f"[{radio_name}] RX: {safe_line}")
+                        log_debug_packet(radio_name, safe_line)
 
-                    # Utilities
+                    # Utilities & Sensor Logic
                     if "Neptune-R900" in model and data.get("consumption") is not None:
                         real_val = float(data["consumption"]) / 10.0
                         dispatch_reading(clean_id, "meter_reading", real_val, dev_name, model, mqtt_handler)
@@ -273,7 +279,6 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
                         dispatch_reading(clean_id, "Consumption", data["consumption"], dev_name, model, mqtt_handler)
                         del data["consumption"]
 
-                    # Dew Point
                     t_c = None
                     if "temperature_C" in data: t_c = data["temperature_C"]
                     elif "temp_C" in data: t_c = data["temp_C"]
@@ -285,7 +290,6 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
                         if dp_f is not None:
                             dispatch_reading(clean_id, "dew_point", dp_f, dev_name, model, mqtt_handler)
 
-                    # Flatten & Send
                     flat = flatten(data)
                     for key, value in flat.items():
                         if key in getattr(config, 'SKIP_KEYS', []): continue
@@ -298,85 +302,82 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
                             dispatch_reading(clean_id, key, value, dev_name, model, mqtt_handler)
 
             if proc: proc.wait()
-            if proc.returncode != 0:
-                print(f"[{radio_name}] Process exited with code {proc.returncode}")
-                mqtt_handler.send_sensor(
-                    sys_id, status_field, "Error: Crashed", sys_name, sys_model, 
-                    is_rtl=True, friendly_name=status_friendly_name
-                )
-
         except Exception as e:
             print(f"[{radio_name}] Exception: {e}")
-            mqtt_handler.send_sensor(
-                sys_id, status_field, "Script Error", sys_name, sys_model, 
-                is_rtl=True, friendly_name=status_friendly_name
-            )
-
-        print(f"[{radio_name}] Retrying in 30 seconds...")
         time.sleep(30)
 
-def main():
-    print(f"--- RTL-MQTT BRIDGE v{version.__version__} STARTING ---") # <--- UPDATED
-    mqtt_handler = HomeNodeMQTT()
-    mqtt_handler.start()
+def purge_loop(mqtt_handler):
+    # UPDATED: Use log_system_event
+    log_system_event("[STARTUP]", "Auto-Remove / Purge Loop started.")
+    while True:
+        time.sleep(60)
+        try:
+            mqtt_handler.prune_stale_devices()
+        except Exception as e:
+            log_system_event("[ERROR]", f"Purge loop failed: {e}")
 
-    # --- 1. GET SYSTEM IDENTITY ---
-    # We grab these here so we can pass them to the RTL loop
+def main():
+    # --- 1. SETUP & IDENTITY ---
+    mqtt_handler = HomeNodeMQTT()
     sys_id = get_system_mac().replace(":", "").lower()
     sys_model = socket.gethostname().title()
+    first_signal_event = threading.Event()
 
-    # --- 2. START RTL THREADS ---
+    # --- 2. START ALL THREADS ---
+    mqtt_handler.start()
+
     rtl_config = getattr(config, "RTL_CONFIG", None)
-
     if rtl_config:
-        # Explicit radios from config.py
         for radio in rtl_config:
-            threading.Thread(
-                target=rtl_loop,
-                args=(radio, mqtt_handler, sys_id, sys_model),
-                daemon=True,
-            ).start()
+            threading.Thread(target=rtl_loop, args=(radio, mqtt_handler, sys_id, sys_model, first_signal_event), daemon=True).start()
     else:
-        # AUTO MODE: no RTL_CONFIG defined or it's empty.
-        # Try to detect the actual RTL-SDR serial so we can use it as the ID.
         auto_serial = discover_default_rtl_serial()
+        auto_radio = {"name": f"RTL_{auto_serial}", "id": auto_serial} if auto_serial else {"name": "RTL_auto", "id": "0"}
+        threading.Thread(target=rtl_loop, args=(auto_radio, mqtt_handler, sys_id, sys_model, first_signal_event), daemon=True).start()
 
-        if auto_serial:
-            print(f"[STARTUP] Auto-detected RTL-SDR serial: {auto_serial}")
-            auto_radio = {
-                "name": f"RTL_{auto_serial}",
-                "id": auto_serial,
-            }
-        else:
-            # Fallback if we can't read the serial
-            print("[STARTUP] Using default RTL-SDR id '0'")
-            auto_radio = {
-                "name": "RTL_auto",
-                "id": "0",
-            }
-
-        threading.Thread(
-            target=rtl_loop,
-            args=(auto_radio, mqtt_handler, sys_id, sys_model),
-            daemon=True,
-        ).start()
-
-    # --- 3. START SYSTEM MONITOR ---
     threading.Thread(target=system_stats_loop, args=(mqtt_handler, sys_id, sys_model), daemon=True).start()
-
-    # --- 4. START THROTTLE FLUSHER ---
     threading.Thread(target=throttle_flush_loop, args=(mqtt_handler,), daemon=True).start()
-    
-    # Only start if the config is actually enabled (>0)
     if getattr(config, "DEVICE_PURGE_INTERVAL", 0) > 0:
         threading.Thread(target=purge_loop, args=(mqtt_handler,), daemon=True).start()
-    else:
-        print("[STARTUP] Auto-Remove is DISABLED (Config is 0).")
+
+    # --- 3. SETTLE DOWN PHASE ---
+    time.sleep(2.0)
+    console.clear() 
+
+    # --- 4. MORPH ANIMATION LOOP ---
+    try:
+        with Live(console=console, refresh_per_second=10, transient=False) as live:
+            frame_counter = 0
+            while not first_signal_event.is_set():
+                live.update(get_dashboard_layout(sys_id, sys_model, frame_counter))
+                frame_counter += 1
+                time.sleep(0.1) 
+
+            # Phase 2: Signal Locked
+            final_panel = get_dashboard_layout(sys_id, sys_model, 0)
+            final_panel.border_style = "bold green"
+            final_panel.title = "[bold green] SYSTEM ONLINE [/bold green]"
+            final_panel.subtitle = "[bold green]✔ SIGNAL LOCKED [/bold green]"
+            live.update(final_panel)
+            time.sleep(1.5)
+            
+    except KeyboardInterrupt:
+        console.print("\n[bold red][SHUTDOWN] Stopping MQTT...[/bold red]")
+        mqtt_handler.stop()
+        sys.exit(0)
+
+    # --- 5. CLEAN SLATE ---
+    console.clear()
+
+    # --- 6. LOG STREAM STARTING ---
+    console.print("[bold green]✔ Data Stream Active[/bold green]")
+    
     try:
         while True: time.sleep(1)
     except KeyboardInterrupt:
-        print("\n[SHUTDOWN] Stopping MQTT...")
+        console.print("\n[bold red][SHUTDOWN] Stopping MQTT...[/bold red]")
         mqtt_handler.stop()
+        sys.exit(0)
 
 if __name__ == "__main__":
     main()
