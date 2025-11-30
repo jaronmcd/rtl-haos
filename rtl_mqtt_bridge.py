@@ -355,6 +355,9 @@ def purge_loop(mqtt_handler):
 
 def main():
     # --- 1. SETUP & IDENTITY ---
+    # ENSURE SILENCE AT START
+    logger.set_logging(False) 
+    
     mqtt_handler = HomeNodeMQTT()
     sys_id = get_system_mac().replace(":", "").lower()
     sys_model = socket.gethostname().title()
@@ -362,7 +365,11 @@ def main():
 
     # --- 2. START ALL THREADS ---
     mqtt_handler.start()
-
+    
+    # ... (Your thread starting logic here is fine) ...
+    # (The threads will start running now, but they will be SILENT because logging is False)
+    
+    # ... (Thread starting code) ...
     rtl_config = getattr(config, "RTL_CONFIG", None)
     if rtl_config:
         for radio in rtl_config:
@@ -376,6 +383,7 @@ def main():
     threading.Thread(target=throttle_flush_loop, args=(mqtt_handler,), daemon=True).start()
     if getattr(config, "DEVICE_PURGE_INTERVAL", 0) > 0:
         threading.Thread(target=purge_loop, args=(mqtt_handler,), daemon=True).start()
+
 
     # --- 3. SETTLE DOWN PHASE ---
     time.sleep(2.0)
@@ -398,20 +406,23 @@ def main():
             time.sleep(1.5)
             
     except KeyboardInterrupt:
-        console.print("\n[bold red][SHUTDOWN] Stopping MQTT...[/bold red]")
+        logger.set_logging(True) # Enable logs just to say goodbye
+        logger.warn("[SHUTDOWN]", "Stopping MQTT...")
         mqtt_handler.stop()
         sys.exit(0)
 
     # --- 5. CLEAN SLATE ---
     console.clear()
+    
+    # --- 6. UN-MUTE EVERYTHING ---
+    logger.set_logging(True) # <--- HERE IS THE MAGIC FIX
 
-    # --- 6. LOG STREAM STARTING ---
     console.print("[bold green]✔ Data Stream Active[/bold green]")
     
     try:
         while True: time.sleep(1)
     except KeyboardInterrupt:
-        console.print("\n[bold red][SHUTDOWN] Stopping MQTT...[/bold red]")
+        logger.warn("[SHUTDOWN]", "Stopping MQTT...")
         mqtt_handler.stop()
         sys.exit(0)
 

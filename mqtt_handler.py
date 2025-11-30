@@ -17,7 +17,6 @@ class HomeNodeMQTT:
         # Initialize MQTT Client
         self.client = mqtt.Client() 
         self.TOPIC_AVAILABILITY = f"home/status/rtl_bridge{config.ID_SUFFIX}/availability"
-        
         if config.MQTT_SETTINGS.get("user"):
             self.client.username_pw_set(config.MQTT_SETTINGS["user"], config.MQTT_SETTINGS["pass"])
             
