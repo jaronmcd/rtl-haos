@@ -91,6 +91,8 @@ graph TD
 |:---:|:---:|:---:|
 | <img width="566" height="499" alt="image" src="https://github.com/user-attachments/assets/93a22bc7-aa6f-4f88-8bdf-276ecb7cf383" /> | <img width="558" height="496" alt="image" src="https://github.com/user-attachments/assets/a1138265-e95d-41ec-a02b-93030a0e4824" /> | <img width="558" height="496" alt="image" src="https://github.com/user-attachments/assets/1a262af2-2273-40ce-9e9a-c5baac6ded78" /> |
 
+The signal boost between 8:00AM and 5:00PM is becasue the AcuRite 5-in-1 Weather Sensor uses an internal supercapacitor, which is trickle-charged by a built-in solar panel during daylight hours boosting signal strength. 
+
 
 
 | Efficacy Diagnosis Using Historical Gas Meter and Room Temperature Data |
