@@ -198,6 +198,7 @@ sudo reboot now
 Run the bridge manually to test connection:
 
 ```bash
+cd rtl-haos
 source venv/bin/activate
 python3 rtl_mqtt_bridge.py
 ```
