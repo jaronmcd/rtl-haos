@@ -34,16 +34,31 @@ It also functions as a **System Monitor**, reporting the host machine's health (
 ```mermaid
 graph TD
     subgraph "RF Devices (Airwaves)"
-        A(<b>Weather Station</b>) -->|433.92 MHz| D(<b>Antenna</b>)
+        A(<b>Weather Station</b>) -->|433.92 MHz| D
         B(<b>Motion Sensor</b>) -->|315 MHz| D
         C(<b>Utility Meter</b>) -->|915 MHz| D
+        D(<b>RTL-SDR Dongle</b>)
     end
 
+    %% USB from dongle into host
+    D -->|USB Signal| E
+
     subgraph "Host Machine (Raspberry Pi/Linux)"
-        D(<b>RTL-SDR Dongle</b>) -->|USB Signal| E(<b>rtl_433 Binary</b>)
-        E -->|Raw JSON| F("<b>RTL-HAOS Bridge</b><br/>(This Software)")
-        
+        direction LR
+
+        %% Spacer node so the title has room above everything
+        SPACER[" "]
+
+        E(<b>rtl_433 Binary</b>)
+        L("<b>Optional Custom Script</b><br/>(TCP Input :4000)")
+        F("<b>RTL-HAOS Bridge</b><br/>(This Software)")
+
+        %% Data path on host
+        E -->|Stdout| F
+        L -->|JSON Stream| F
+
         subgraph "System Stats"
+            direction TB
             H(<b>CPU/RAM</b>) --> F
             I(<b>Disk/Temp</b>) --> F
         end
@@ -56,25 +71,22 @@ graph TD
         G -->|MQTT Auto-Discovery| J(<b>Sensor Entities</b>)
         G -->|Diagnostic Data| K(<b>System Monitor</b>)
     end
-    
+
     %% STYLING
-    
-    %% RTL Bridge (Orange)
+    style SPACER fill:none,stroke:none,stroke-width:0px
+
     style F fill:#f96,stroke:#333,stroke-width:4px,color:black,rx:10,ry:10
-    
-    %% MQTT Broker (Blue)
     style G fill:#bbdefb,stroke:#0d47a1,stroke-width:4px,color:black,rx:10,ry:10
-    
-    %% Sensor Entities (Green)
     style J fill:#5fb,stroke:#333,stroke-width:2px,color:black,rx:10,ry:10
-    
-    %% System Monitor (Gray)
     style K fill:#cfd8dc,stroke:#333,stroke-width:2px,color:black,rx:10,ry:10
-    
-    %% Input Devices (White)
+
     style A fill:#fff,stroke:#333,stroke-width:2px,color:black,rx:5,ry:5
     style B fill:#fff,stroke:#333,stroke-width:2px,color:black,rx:5,ry:5
     style C fill:#fff,stroke:#333,stroke-width:2px,color:black,rx:5,ry:5
+
+    style L fill:#fff9c4,stroke:#fbc02d,stroke-width:2px,color:black,rx:5,ry:5
+
+
 ```
 
 ---
@@ -84,6 +96,15 @@ graph TD
 | Device View | System Monitor |
 |:---:|:---:|
 | <img width="514" height="653" alt="image" src="https://github.com/user-attachments/assets/04939cba-dfa0-44fb-bb33-2c50db6a13ad" /> | <img width="329" height="858" alt="image" src="https://github.com/user-attachments/assets/723a5454-4876-4f86-af86-a10b3bba516e" /> |
+
+**Signal Diagnosis (SNR, RSSI, Noise)**
+<br />
+<img src="https://github.com/user-attachments/assets/93a22bc7-aa6f-4f88-8bdf-276ecb7cf383" width="30%" alt="SNR" />
+<img src="https://github.com/user-attachments/assets/a1138265-e95d-41ec-a02b-93030a0e4824" width="30%" alt="RSSI" />
+<img src="https://github.com/user-attachments/assets/1a262af2-2273-40ce-9e9a-c5baac6ded78" width="30%" alt="Noise Floor" />
+
+<p><em>The signal boost between 8:00 AM and 5:00 PM is due to the AcuRite 5-in-1 internal supercapacitor charging via solar panel.</em></p>
+
 
 | Efficacy Diagnosis Using Historical Gas Meter and Room Temperature Data |
 |:---:|
