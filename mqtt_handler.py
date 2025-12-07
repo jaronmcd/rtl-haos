@@ -147,7 +147,7 @@ class HomeNodeMQTT:
 
         # --- BUTTON 2: DEV NUKE (5x TAP) ---
         self._pub_btn(
-            "☢️ DESTROY ALL (5x Tap)", "nuke", "mdi:alert-decagram", 
+            "DESTROY ALL (5x Tap)", "nuke", "mdi:nuke", 
             device_name, identifier, category="config"
         )
 
