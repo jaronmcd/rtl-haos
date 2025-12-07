@@ -8,6 +8,7 @@ import importlib.util
 import fnmatch
 import socket
 import statistics 
+import shlex 
 from datetime import datetime
 from collections import deque
 import re
@@ -32,11 +33,14 @@ import version
 import logger
 from logger import console
 
+# --- SHARED STATE ---
+RUNTIME_VARS = {
+    "current_freq": "INITIALIZING",
+    "status_msg": "STARTING UP"
+}
+
 # --- PRE-FLIGHT DEPENDENCY CHECK ---
 def check_dependencies():
-    if not subprocess.run(["which", "rtl_433"], capture_output=True).stdout:
-        logger.error("CRITICAL", "'rtl_433' binary not found. Please install it.")
-        sys.exit(1)
     if importlib.util.find_spec("paho") is None:
         logger.error("CRITICAL", "Python dependency 'paho-mqtt' not found.")
         sys.exit(1)
@@ -47,16 +51,6 @@ check_dependencies()
 DATA_BUFFER = {} 
 BUFFER_LOCK = threading.Lock()
 
-# ---------------- DASHBOARD ----------------
-import random
-from rich.columns import Columns
-from rich.console import Group
-from rich.panel import Panel
-from rich.table import Table
-from rich.text import Text
-from rich import box
-
-# ---------------- DASHBOARD ----------------
 # ---------------- DASHBOARD ----------------
 def get_dashboard_layout(sys_id, sys_model, frame=0, is_locked=False):
     # --- 1. THEME SELECTION ---
@@ -76,7 +70,9 @@ def get_dashboard_layout(sys_id, sys_model, frame=0, is_locked=False):
         
         spinner_chars = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         spin_char = spinner_chars[frame % len(spinner_chars)]
-        status_msg = f"[{base_color}]{spin_char} SCANNING FREQUENCIES...[/{base_color}]"
+        
+        freq = RUNTIME_VARS.get("current_freq", "WAITING")
+        status_msg = f"[{base_color}]{spin_char} SCANNING {freq}...[/{base_color}]"
         
         box_type = box.ROUNDED
         scanner_active = True
@@ -121,7 +117,7 @@ def get_dashboard_layout(sys_id, sys_model, frame=0, is_locked=False):
     table.add_row("CORE SYSTEM", f"{sys_model}\n[dim]{sys_id}[/dim]")
     table.add_row("MQTT BRIDGE", f"{config.MQTT_SETTINGS['host']}")
     table.add_row("RTL RADIO", f"ACTIVE NODES: {r_count}")
-    table.add_row("TCP INPUT", tcp_stat)  # <--- It is now explicitly here
+    table.add_row("TCP INPUT", tcp_stat) 
     
     # --- 4. SCANNER ANIMATION ---
     if scanner_active:
@@ -348,27 +344,129 @@ def discover_default_rtl_serial():
                 return parts[1].strip().split()[0]
     return None
 
-def rtl_loop(radio_config, mqtt_handler, sys_id, sys_model, signal_event):
-    device_id = radio_config.get("id", "0")
-    frequency = radio_config.get("freq", "433.92M")
-    radio_name = radio_config.get("name", f"RTL_{device_id}")
-    sample_rate = radio_config.get("rate", "250k")
+def validate_radio_device(device_id=None, rtl_path="rtl_433"):
+    """
+    Checks if the specified SDR device exists. 
+    If device_id is None, it checks if ANY radio is available.
+    """
+    # --- CONFIGURATION CHECK ---
+    if device_id is None:
+        all_radios = getattr(config, "RTL_CONFIG", [])
+        
+        # If we have multiple radios defined in config...
+        if all_radios and len(all_radios) > 1:
+            # ...fail if EVEN ONE is missing an ID.
+            # Mixed mode (some with ID, some without) causes race conditions.
+            if any(r.get("id") is None for r in all_radios):
+                raise ValueError(
+                    "Configuration Error: Ambiguous Radio Setup. "
+                    "When using multiple radios, EVERY radio must have a unique 'id' "
+                    "to prevent them from fighting over the same USB hardware."
+                )
 
-    status_field = f"radio_status_{device_id}"
+    msg = f"ID {device_id}" if device_id else "First Available (Auto)"
+    logger.info("[HARDWARE]", f"Testing connectivity for Radio: {msg} using '{rtl_path}'...")
+    
+    # Base command: Run for 1 second (-T 1)
+    cmd = [rtl_path, "-T", "1"]
+    
+    # Only add the Device Flag if the user specifically asked for an ID
+    if device_id:
+        cmd.extend(["-d", f":{device_id}"])
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        if result.returncode != 0:
+            full_output = (result.stderr + result.stdout).strip()
+            
+            if "No supported device" in full_output:
+                 raise ValueError(f"Radio ({msg}) not found. Is it plugged in?")
+            elif "usb_claim_interface" in full_output or "Device or resource busy" in full_output:
+                 raise PermissionError(f"Radio ({msg}) is BUSY. (Is another instance of rtl_433 running?)")
+            else:
+                raise RuntimeError(f"Radio Self-Test Failed.\nOutput:\n{full_output}")
+
+        logger.info("[HARDWARE]", "✔ Radio checks out. Hardware is responding.")
+        return True
+
+    except FileNotFoundError:
+        logger.error("CRITICAL", f"'{rtl_path}' command not found. Please install it or check 'rtl_433_cmd' in config.")
+        sys.exit(1)
+    except Exception as e:
+        raise e
+
+def rtl_loop(radio_config, mqtt_handler, sys_id, sys_model, signal_event):
+    # 1. Config & Defaults
+    device_id = radio_config.get("id") 
+    display_id = device_id if device_id else "0"
+    
+    # Allow custom binary path (default to standard command)
+    rtl_binary = radio_config.get("rtl_433_cmd", "rtl_433")
+    
+    radio_name = radio_config.get("name", f"RTL_{display_id}")
+    sample_rate = radio_config.get("rate", "250k")
+    
+    raw_freq = radio_config.get("freq", "433.92M")
+    hop_interval = radio_config.get("hop_interval", 60)
+    
+    # Dashboard: Show FULL plan, not trying to update live
+    freq_list = raw_freq if isinstance(raw_freq, list) else [raw_freq]
+    scan_display = ", ".join(str(f).replace("M", "M").replace("k", "k") for f in freq_list)
+    RUNTIME_VARS["current_freq"] = f"{scan_display}"
+
+    # Define Sensor IDs 
+    status_field = f"radio_status_{display_id}"
+    plan_field = f"scan_plan_{display_id}"
+    
     status_friendly_name = f"{radio_name}"
     sys_name = f"{sys_model} ({sys_id})"
 
-    cmd = ["rtl_433", "-d", f":{device_id}", "-f", frequency, "-s", sample_rate, "-F", "json", "-M", "time:iso", "-M", "protocol", "-M", "level"]
+    # --- COMMAND CONSTRUCTION ---
+    # Start with binary and sample rate
+    cmd = [rtl_binary, "-s", sample_rate]
 
-    logger.info("[RTL]", f"Manager started for {radio_name}. Monitoring...")
+    if device_id:
+        cmd.extend(["-d", f":{device_id}"])
 
+    # --- INJECT RAW PARAMS (Custom Flags) ---
+    raw_params = radio_config.get("raw_params")
+    if raw_params:
+        if isinstance(raw_params, list):
+            cmd.extend(raw_params)
+        elif isinstance(raw_params, str):
+            cmd.extend(shlex.split(raw_params))
+    
+    # Add Frequencies & Hopping
+    if isinstance(raw_freq, list):
+        for f in raw_freq:
+            cmd.extend(["-f", str(f)])
+        if len(raw_freq) > 1:
+            cmd.extend(["-H", str(hop_interval)])
+    else:
+        cmd.extend(["-f", str(raw_freq)])
+
+    cmd.extend(["-F", "json", "-M", "time:iso", "-M", "protocol", "-M", "level"])
+
+    logger.info("[RTL]", f"Manager started for {radio_name}. Plan: {scan_display}")
+
+    # --- MAIN MONITORING LOOP ---
+    
     while True:
+        # Publish Status
         mqtt_handler.send_sensor(sys_id, status_field, "Scanning...", sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
         time.sleep(2)
 
         proc = None
         try:
+            # bufsize=1 and universal_newlines=True ensures real-time output
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+            
             for line in proc.stdout:
                 if not line: continue
                 safe_line = line.strip()
@@ -377,8 +475,8 @@ def rtl_loop(radio_config, mqtt_handler, sys_id, sys_model, signal_event):
                     logger.error("[ERROR]", f"[{radio_name}] Hardware missing!")
                     mqtt_handler.send_sensor(sys_id, status_field, "No Device Found", sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
                 
+                # --- PROCESS JSON DATA ---
                 if safe_line.startswith("{") and safe_line.endswith("}"):
-                     # Status update logic remains here
                     mqtt_handler.send_sensor(sys_id, status_field, "Online", sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
                     
                     # Hand off to shared processor
@@ -442,9 +540,22 @@ def purge_loop(mqtt_handler):
 
 def main():
     # --- 1. SETUP & IDENTITY ---
-    # ENSURE SILENCE AT START
+    print("Checking Hardware...")
+    rtl_config = getattr(config, "RTL_CONFIG", None)
+    if rtl_config:
+        for radio in rtl_config:
+            # Get ID (optional)
+            r_id = radio.get("id") 
+            # Get Custom Binary Path (optional)
+            custom_bin = radio.get("rtl_433_cmd", "rtl_433")
+            try:
+                validate_radio_device(r_id, rtl_path=custom_bin)
+            except Exception as e:
+                print(f"\n[!!!] CRITICAL HARDWARE FAILURE: {e}")
+                print("[!!!] The script will exit now.\n")
+                sys.exit(1)
+
     logger.set_logging(False) 
-    
     mqtt_handler = HomeNodeMQTT()
     sys_id = get_system_mac().replace(":", "").lower()
     sys_model = socket.gethostname().title()
@@ -453,7 +564,6 @@ def main():
     # --- 2. START ALL THREADS ---
     mqtt_handler.start()
     
-    rtl_config = getattr(config, "RTL_CONFIG", None)
     if rtl_config:
         for radio in rtl_config:
             threading.Thread(target=rtl_loop, args=(radio, mqtt_handler, sys_id, sys_model, first_signal_event), daemon=True).start()
@@ -496,7 +606,7 @@ def main():
             final_panel = get_dashboard_layout(sys_id, sys_model, frame=frame_counter, is_locked=True)
             live.update(final_panel)
             
-            # Hold the green "Success" screen for 1.5s so the user sees it
+            # Hold the green "Success" screen for 1.5s
             time.sleep(1.5)
             
     except KeyboardInterrupt:

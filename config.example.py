@@ -32,27 +32,52 @@ MQTT_SETTINGS = {
 # The script will automatically find the first available radio.
 RTL_CONFIG = []
 
-# MULTI-RADIO SETUP:
-# If you have multiple SDRs (e.g., one for 433MHz weather, one for 915MHz utilities),
-# you must define them here so the script knows which is which.
-#
-# NOTE: You must set unique Serial Numbers on your dongles using the 'rtl_eeprom' tool.
-# Example:
+# ==============================================================================
+# MULTI-RADIO & FREQUENCY HOPPING SETUP:
+# ==============================================================================
+# You can define multiple SDRs, or a single SDR that "hops" between frequencies.
+
+# HOPPING EXAMPLE:
+# To monitor both 433MHz and 915MHz with a single dongle (switching every 60s):
+# RTL_CONFIG = [
+#     {
+#         "name": "Hopping Radio",
+#         "freq": ["433.92M", "915M"], 
+#         "hop_interval": 60, # Switch frequency every 60 seconds
+#         "rate": "1024k"     # Compromise sample rate
+#     }
+# ]
+
+# MULTI-DONGLE EXAMPLE:
+# When using multiple radios, EVERY radio must have a unique 'id'.
 # RTL_CONFIG = [
 #     # Radio 1: Listens for Weather Stations (Acurite, Ambient Weather)
 #     {
 #         "name": "Weather Radio", 
-#         "id": "101",        # The Serial Number (set via rtl_eeprom)
-#         "freq": "433.92M",  # Standard frequency for most weather sensors
-#         "rate": "250k"      # Lower sample rate reduces CPU usage
+#         "id": "101",          # The Serial Number (set via rtl_eeprom)
+#         "freq": "433.92M",    # Standard frequency for most weather sensors
+#         "rate": "250k"        # Lower sample rate reduces CPU usage
+#     },
 #     },
 #     # Radio 2: Listens for Utility Meters (Gas/Water/Electric)
 #     {
 #         "name": "Utility Radio", 
-#         "id": "102", 
-#         "freq": "912.6M",   # Standard US frequency for ERT meters
-#         "rate": "2400k"     # Higher rate often needed for hopping signals
+#         "id": "102",          # The Serial Number (set via rtl_eeprom)
+#         "freq": "912.6M",     # Standard US frequency for ERT meters
+#         "rate": "2400k"       # Higher rate often needed for hopping signals
 #     },
+# ]
+
+# POWER USER EXAMPLE:
+# RTL_CONFIG = [
+#     {
+#         "name": "Custom Radio",
+#         "freq": "433.92M",
+#         # Use the special version I compiled
+#         "rtl_433_cmd": "/opt/rtl_433_custom/build/src/rtl_433",
+#         # Set Gain to 28dB, PPM error to 12
+#         "raw_params": "-g 28 -p 12" 
+#     }
 # ]
 
 # ==============================================================================
@@ -195,8 +220,6 @@ ID_SUFFIX = "_v2" if FORCE_NEW_IDS else ""
 # If True, prints every single JSON line received from rtl_433 to the console.
 # Useful for finding the exact model name of a device to whitelist/blacklist it.
 DEBUG_RAW_JSON = False
-
-# config.example.py (Add to the bottom or near RTL_CONFIG)
 
 # ==============================================================================
 # TCP INPUT: REMOTE RTL_433 INSTANCES
