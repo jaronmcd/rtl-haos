@@ -183,7 +183,7 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
 
     # CMD
     cmd = [
-        rtl_433_cmd,  "-s", sample_rate, "-F", "json",
+        rtl_433_cmd, "-d", f":{device_id}", "-s", sample_rate, "-F", "json",
         "-M", "time:iso", "-M", "protocol", "-M", "level",
     ]
 
