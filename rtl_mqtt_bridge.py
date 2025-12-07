@@ -12,6 +12,7 @@ import threading
 import sys
 import importlib.util
 import fnmatch
+import re
 import socket
 import statistics 
 from rich import print
@@ -162,10 +163,13 @@ def discover_default_rtl_serial():
 
 def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_model: str) -> None:
     # Radio Config
+    rtl_433_cmd = radio_config.get("rtl_433_cmd", "rtl_433")
     device_id = radio_config.get("id", "0")
     frequency = radio_config.get("freq", "433.92M")
+    hop_interval = radio_config.get("hop_interval", "20")
     radio_name = radio_config.get("name", f"RTL_{device_id}")
     sample_rate = radio_config.get("rate", "250k")
+    raw_params = radio_config.get("raw_params", "")
 
     # --- Names & IDs ---
     # The internal field name (used for topic/unique_id)
@@ -179,9 +183,19 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
 
     # CMD
     cmd = [
-        "rtl_433", "-d", f":{device_id}", "-f", frequency, "-s", sample_rate,
-        "-F", "json", "-M", "time:iso", "-M", "protocol", "-M", "level",
+        rtl_433_cmd,  "-s", sample_rate, "-F", "json",
+        "-M", "time:iso", "-M", "protocol", "-M", "level",
     ]
+
+    for freq in frequency.split(","):
+        cmd.extend(["-f", freq.strip()])
+
+    if hop_interval.strip():
+        cmd.extend(["-H", hop_interval.strip()])
+
+    if raw_params:
+        for raw in re.sub(r"\s+", " ", raw_params.strip()).split(" "):
+            cmd.append(raw.strip())
 
     print(f"[RTL] Manager started for {radio_name}. Monitoring...")
 
@@ -288,6 +302,7 @@ def rtl_loop(radio_config: dict, mqtt_handler: HomeNodeMQTT, sys_id: str, sys_mo
             if proc: proc.wait()
             if proc.returncode != 0:
                 print(f"[{radio_name}] Process exited with code {proc.returncode}")
+                print(subprocess.list2cmdline(cmd))
                 mqtt_handler.send_sensor(
                     sys_id, status_field, "Error: Crashed", sys_name, sys_model, 
                     is_rtl=True, friendly_name=status_friendly_name
@@ -317,7 +332,7 @@ def main():
     # --- 2. START RTL THREADS ---
     rtl_config = getattr(config, "RTL_CONFIG", None)
 
-    if rtl_config:
+    if rtl_config and len(rtl_config) > 1:
         # Explicit radios from config.py
         for radio in rtl_config:
             threading.Thread(
@@ -326,7 +341,7 @@ def main():
                 daemon=True,
             ).start()
     else:
-        # AUTO MODE: no RTL_CONFIG defined or it's empty.
+        # AUTO MODE: no RTL_CONFIG defined or it's empty/single config.
         # Try to detect the actual RTL-SDR serial so we can use it as the ID.
         auto_serial = discover_default_rtl_serial()
 
@@ -343,6 +358,8 @@ def main():
                 "name": "RTL_auto",
                 "id": "0",
             }
+
+        auto_radio = auto_radio | rtl_config[0] if rtl_config else {}
 
         threading.Thread(
             target=rtl_loop,
@@ -364,3 +381,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
