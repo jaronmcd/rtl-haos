@@ -27,15 +27,10 @@ from utils import get_system_mac
 
 def format_list_for_ha(data_list):
     """Joins a list into a string and truncates to ~250 chars."""
-    if not data_list:
-        return "None"
-    
-    # Convert all items to string just in case
+    if not data_list: return "None"
     str_list = [str(i) for i in data_list]
     joined = ", ".join(sorted(str_list))
-    
-    if len(joined) > 250:
-        return joined[:247] + "..."
+    if len(joined) > 250: return joined[:247] + "..."
     return joined
 
 def system_stats_loop(mqtt_handler, DEVICE_ID, MODEL_NAME):
@@ -49,31 +44,22 @@ def system_stats_loop(mqtt_handler, DEVICE_ID, MODEL_NAME):
         except Exception as e:
             logger.info("[WARN]", f"Hardware Monitor failed to start: {e}")
 
+    full_device_name = f"{MODEL_NAME} ({DEVICE_ID})"
+    
     print("[STARTUP] Starting System Monitor Loop...")
+
+    # NOTE: Button registration is now handled automatically 
+    # inside mqtt_handler._on_connect()
     
     while True:
-        device_name = f"{MODEL_NAME} ({DEVICE_ID})" 
+        device_name = full_device_name
 
         # --- 1. BRIDGE METRICS (Always Run) ---
         try:
-            # A. Tracked Devices
             devices = mqtt_handler.tracked_devices
             count = len(devices)
-            dev_list_str = format_list_for_ha(devices) if count > 0 else "Scanning..."
-
             mqtt_handler.send_sensor(DEVICE_ID, "sys_device_count", count, device_name, MODEL_NAME, is_rtl=True)
             mqtt_handler.send_sensor(DEVICE_ID, "sys_version", version.__version__, device_name, MODEL_NAME, is_rtl=True)
-            # mqtt_handler.send_sensor(DEVICE_ID, "sys_device_list", dev_list_str, device_name, MODEL_NAME, is_rtl=True)
-
-            # B. Configuration Lists (Sent as Diagnostics)
-            # We fetch these fresh from config every loop in case of future hot-reloads
-            # bl = getattr(config, "DEVICE_BLACKLIST", [])
-            # wl = getattr(config, "DEVICE_WHITELIST", [])
-            # ms = getattr(config, "MAIN_SENSORS", [])
-
-            # mqtt_handler.send_sensor(DEVICE_ID, "sys_cfg_blacklist", format_list_for_ha(bl), device_name, MODEL_NAME, is_rtl=True)
-            # mqtt_handler.send_sensor(DEVICE_ID, "sys_cfg_whitelist", format_list_for_ha(wl), device_name, MODEL_NAME, is_rtl=True)
-            # mqtt_handler.send_sensor(DEVICE_ID, "sys_cfg_sensors", format_list_for_ha(ms), device_name, MODEL_NAME, is_rtl=True)
             
         except Exception as e:
             logger.info("[ERROR]", f"Bridge Stats update failed: {e}")
@@ -83,14 +69,7 @@ def system_stats_loop(mqtt_handler, DEVICE_ID, MODEL_NAME):
             try:
                 stats = sys_mon.read_stats()
                 for key, value in stats.items(): 
-                    mqtt_handler.send_sensor(
-                        DEVICE_ID, 
-                        key, 
-                        value, 
-                        device_name, 
-                        MODEL_NAME, 
-                        is_rtl=True 
-                    )
+                    mqtt_handler.send_sensor(DEVICE_ID, key, value, device_name, MODEL_NAME, is_rtl=True)
             except Exception as e:
                 logger.info("[SYSTEM ERROR]", f"Hardware stats failed: {e}")
             

@@ -3,41 +3,176 @@ import json
 import threading
 import sys
 import time
+import socket
 import paho.mqtt.client as mqtt
 
 # Local imports
 import config
-from utils import clean_mac
+from utils import clean_mac, get_system_mac
 from field_meta import FIELD_META
 import version
 import logger 
 
 class HomeNodeMQTT:
     def __init__(self):
-        # Initialize MQTT Client
-        self.client = mqtt.Client() 
+        # Initialize MQTT Client (Paho 2.0 compatible)
+        if hasattr(mqtt, "CallbackAPIVersion"):
+             self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
+        else:
+             self.client = mqtt.Client()
+
+        self.sys_id = get_system_mac().replace(":", "").lower()
+        self.sys_model = socket.gethostname().title() 
         self.TOPIC_AVAILABILITY = f"home/status/rtl_bridge{config.ID_SUFFIX}/availability"
+        
         if config.MQTT_SETTINGS.get("user"):
             self.client.username_pw_set(config.MQTT_SETTINGS["user"], config.MQTT_SETTINGS["pass"])
             
         self.client.will_set(self.TOPIC_AVAILABILITY, "offline", retain=True)
         self.client.on_connect = self._on_connect
+        self.client.on_message = self._on_message 
 
         self.discovery_published = set()
         self.last_sent_values = {}
         self.tracked_devices = set()
         
-        # Garbage Collection Tracking
         self.last_seen_timestamps = {}
         self.discovery_topics = {}
-        
         self.discovery_lock = threading.Lock()
+        
+        # Safety Systems
+        self.nuke_active = False
+        self.nuke_last_click = 0
+        self.nuke_tap_count = 0
 
-    def _on_connect(self, c, u, f, rc):
+    def _on_connect(self, c, u, f, rc, props=None):
         if rc == 0:
             c.publish(self.TOPIC_AVAILABILITY, "online", retain=True)
+            # Subscribe to command topics
+            cmd_topic = f"home/rtl_bridge/{self.sys_id}/commands/#"
+            c.subscribe(cmd_topic)
+            
+            # Publish Admin Buttons
+            self.publish_admin_buttons()
         else:
             logger.error("[MQTT]", f"Connection Failed! Code: {rc}")
+
+    def _on_message(self, client, userdata, msg):
+        try:
+            payload = msg.payload.decode()
+            now = time.time()
+            
+            # --- 1. COMMAND HANDLING ---
+            if msg.topic.endswith("/purge") and payload == "PRESS":
+                logger.info("[COMMAND]", "Force Purge Triggered")
+                self.prune_stale_devices(force=True)
+                return
+
+            if msg.topic.endswith("/nuke") and payload == "PRESS":
+                # --- 5-TAP SAFETY LOGIC ---
+                time_since_last = now - self.nuke_last_click
+                
+                # Reset count if it's been more than 5 seconds since last click
+                if time_since_last > 5.0:
+                    self.nuke_tap_count = 0
+                
+                self.nuke_tap_count += 1
+                self.nuke_last_click = now
+                
+                clicks_needed = 5 - self.nuke_tap_count
+                
+                if clicks_needed <= 0:
+                    logger.warn("[NUKE]", "🚨 ACTIVATION CONFIRMED. EXECUTING WIPE. 🚨")
+                    self.perform_nuclear_option()
+                    self.nuke_tap_count = 0 # Reset
+                else:
+                    logger.warn("[NUKE]", f"⚠️ ARMED! {clicks_needed} MORE CLICKS TO DETONATE... ⚠️")
+                return
+
+            # --- 2. NUKE SCANNING (Only active during Nuke Mode) ---
+            if self.nuke_active and msg.topic.startswith("homeassistant"):
+                try:
+                    data = json.loads(payload)
+                    dev_manufacturer = data.get("device", {}).get("manufacturer", "")
+                    
+                    # If matches our signature "rtl-haos", DESTROY IT.
+                    if dev_manufacturer == "rtl-haos":
+                        logger.warn("[NUKE]", f"Deleting Ghost: {msg.topic}")
+                        client.publish(msg.topic, "", retain=True)
+                except:
+                    pass
+
+        except Exception as e:
+            pass
+
+    def perform_nuclear_option(self):
+        """Activates 'Search and Destroy' mode for 5 seconds."""
+        if self.nuke_active: return
+        
+        logger.warn("[NUKE]", "☢️ NUCLEAR LAUNCH DETECTED ☢️")
+        logger.warn("[NUKE]", "Scanning for ALL rtl-haos devices...")
+        
+        self.nuke_active = True
+        # Subscribe to ALL discovery topics to find ghosts
+        self.client.subscribe("homeassistant/+/+/config")
+        
+        # Schedule the 'All Clear' in 5 seconds
+        threading.Timer(5.0, self._stop_nuke).start()
+
+    def _stop_nuke(self):
+        """Stops the nuke process and restores admin buttons."""
+        self.client.unsubscribe("homeassistant/+/+/config")
+        self.nuke_active = False
+        logger.info("[NUKE]", "Wipe Complete. Restoring System...")
+        
+        # Re-publish buttons
+        self.publish_admin_buttons()
+        
+        # Clear internal memory so we can rediscover fresh
+        self.discovery_published.clear()
+        self.tracked_devices.clear()
+        self.last_sent_values.clear()
+        self.last_seen_timestamps.clear()
+
+    def publish_admin_buttons(self):
+        """Publishes Purge and Nuke buttons."""
+        device_name = f"{self.sys_model} ({self.sys_id})"
+        identifier = f"rtl433_{self.sys_model}_{self.sys_id}"
+        
+        # --- BUTTON 1: FORCE PURGE ---
+        self._pub_btn(
+            "Force Purge Stale", "purge", "mdi:broom", 
+            device_name, identifier
+        )
+
+        # --- BUTTON 2: DEV NUKE (5x TAP) ---
+        self._pub_btn(
+            "☢️ DESTROY ALL (5x Tap)", "nuke", "mdi:alert-decagram", 
+            device_name, identifier, category="config"
+        )
+
+    def _pub_btn(self, name, slug, icon, dev_name, identifier, category="config"):
+        unique_id = f"rtl_bridge_{self.sys_id}_{slug}_btn{config.ID_SUFFIX}"
+        config_topic = f"homeassistant/button/{unique_id}/config"
+        command_topic = f"home/rtl_bridge/{self.sys_id}/commands/{slug}"
+
+        payload = {
+            "name": name,
+            "unique_id": unique_id,
+            "command_topic": command_topic,
+            "payload_press": "PRESS",
+            "icon": icon,
+            "device": {
+                "identifiers": [identifier], 
+                "manufacturer": "rtl-haos",
+                "model": self.sys_model,
+                "name": dev_name,
+                "sw_version": version.__version__
+            },
+            "entity_category": category,
+            "availability_topic": self.TOPIC_AVAILABILITY
+        }
+        self.client.publish(config_topic, json.dumps(payload), retain=True)
 
     def start(self):
         try:
@@ -138,10 +273,13 @@ class HomeNodeMQTT:
             if value_changed:
                 logger.telemetry(device_name, field, value, is_rtl)
 
-    def prune_stale_devices(self):
-        """Removes devices that haven't been seen in DEVICE_PURGE_INTERVAL."""
+    def prune_stale_devices(self, force=False):
         purge_interval = getattr(config, "DEVICE_PURGE_INTERVAL", 0)
-        if not purge_interval or purge_interval <= 0: return
+        
+        if not purge_interval or purge_interval <= 0: 
+            if force:
+                logger.warn("[CLEANUP]", "Purge skipped: DEVICE_PURGE_INTERVAL is 0.")
+            return
 
         now = time.time()
         to_delete = []
@@ -152,10 +290,11 @@ class HomeNodeMQTT:
 
         if to_delete:
             logger.warn("[CLEANUP]", f"Executing Purge: {len(to_delete)} Devices")
+        elif force:
+            logger.info("[CLEANUP]", "Manual Purge scan complete. No stale devices found.")
             
         for uid in to_delete:
             logger.warn("[CLEANUP]", f"Forgetting: {uid}")
-            
             if uid in self.discovery_topics:
                 topic = self.discovery_topics[uid]
                 self.client.publish(topic, "", retain=True) 
