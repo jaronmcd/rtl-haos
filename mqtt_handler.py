@@ -113,7 +113,7 @@ class HomeNodeMQTT:
             
             if entity_cat: payload["entity_category"] = entity_cat
 
-            if device_class in ["gas", "energy", "water", "monetary", "percipitation"]:
+            if device_class in ["gas", "energy", "water", "monetary", "precipitation"]:
                 payload["state_class"] = "total_increasing"
             if device_class in ["temperature", "humidity", "pressure", "illuminance", "voltage","wind_speed"]:
                 payload["state_class"] = "measurement"
