@@ -426,7 +426,7 @@ To keep the bridge running 24/7 using the native installation method, use `syste
       ExecStartPre=/bin/sleep 10
 
       # CHANGE THESE PATHS to match your virtual environment and script location
-      ExecStart=/home/pi/rtl-haos/venv/bin/python3 /home/pi/rtl-haos/rtl_mqtt_bridge.py
+      ExecStart=/home/pi/.local/bin/uv --directory /home/pi/rtl-haos/ run python rtl_mqtt_bridge.py
 
       # Restart automatically if it crashes
       Restart=on-failure
