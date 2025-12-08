@@ -113,10 +113,12 @@ class HomeNodeMQTT:
             
             if entity_cat: payload["entity_category"] = entity_cat
 
-            if device_class in ["gas", "energy", "water", "monetary"]:
+            if device_class in ["gas", "energy", "water", "monetary", "percipitation"]:
                 payload["state_class"] = "total_increasing"
-            if device_class in ["temperature", "humidity", "pressure", "illuminance", "voltage"]:
-                 payload["state_class"] = "measurement"
+            if device_class in ["temperature", "humidity", "pressure", "illuminance", "voltage","wind_speed"]:
+                payload["state_class"] = "measurement"
+            if device_class in ["wind_direction"]:
+                payload["state_class"] = "measurement_angle"
 
             payload["expire_after"] = config.RTL_EXPIRE_AFTER
             payload["availability_topic"] = self.TOPIC_AVAILABILITY

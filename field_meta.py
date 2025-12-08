@@ -51,8 +51,8 @@ FIELD_META = {
     "wind_avg_mi_h":        ("mph", "wind_speed", "mdi:weather-windy", "Wind Speed"),
     "wind_gust_km_h":       ("km/h", "wind_speed", "mdi:weather-windy-variant", "Wind Gust"),
     "wind_gust_mi_h":       ("mph", "wind_speed", "mdi:weather-windy-variant", "Wind Gust"),
-    "wind_dir_deg":         ("°", "none", "mdi:compass", "Wind Direction"),
-    "wind_dir":             ("°", "none", "mdi:compass", "Wind Direction"),
+    "wind_dir_deg":         ("°", "wind_direction", "mdi:compass", "Wind Direction"),
+    "wind_dir":             ("°", "wind_direction", "mdi:compass", "Wind Direction"),
 
     # --- Rain ---
     "rain_mm":              ("mm", "precipitation", "mdi:weather-rainy", "Rain Total"),
