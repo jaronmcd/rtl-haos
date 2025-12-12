@@ -9,7 +9,8 @@ DESCRIPTION:
 """
 import re
 import math
-import socket  # <--- Added to get the Hostname
+import socket
+import config
 
 # Global cache
 _SYSTEM_MAC = None
@@ -18,13 +19,16 @@ def get_system_mac():
     global _SYSTEM_MAC
     if _SYSTEM_MAC: 
         return _SYSTEM_MAC
+
+    # 1. PREFERRED: Use Static ID from Config
+    if config.BRIDGE_ID:
+        _SYSTEM_MAC = config.BRIDGE_ID
+        return _SYSTEM_MAC
     
     try:
-        # Use the computer's hostname (e.g., "B6A526Cf") as the unique ID
-        # This matches the prefix you see in Home Assistant
+        # 2. FALLBACK: Use Hostname (Dynamic on HAOS!)
         host_id = socket.gethostname()
         
-        # If for some reason hostname is empty, fallback to a static default
         if not host_id:
             host_id = "rtl-bridge-default"
             
