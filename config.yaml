@@ -22,6 +22,9 @@ options:
   rtl_expire_after: 600
   rtl_throttle_interval: 30
   debug_raw_json: false
+  # NEW: Global Defaults for Auto Mode
+  rtl_default_freq: "433.92M"
+  rtl_default_hop_interval: 60
   rtl_config: []
   device_blacklist:
     - "SimpliSafe*"
@@ -37,11 +40,15 @@ schema:
   rtl_expire_after: int
   rtl_throttle_interval: int
   debug_raw_json: bool
+  # NEW: Global Defaults Schema
+  rtl_default_freq: str
+  rtl_default_hop_interval: int
   rtl_config:
     - name: str
       id: str
       freq: str
       rate: str?
+      hop_interval: int?  # <--- Added this field
   device_blacklist:
     - str
   device_whitelist:
