@@ -4,6 +4,7 @@ DESCRIPTION:
   Manages the 'rtl_433' subprocess interactions.
   - rtl_loop(): The main thread that reads stdout from rtl_433.
   - discover_default_rtl_serial(): Auto-detects USB stick serial numbers.
+  - UPDATED: Now supports Frequency Hopping via 'hop_interval' and multiple frequencies.
 """
 import subprocess
 import json
@@ -74,26 +75,48 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     Runs the rtl_433 process in a loop.
     Parses JSON output and passes it to data_processor.dispatch_reading().
     """
-    # Radio Config
+    # --- Radio Config Parsing ---
     device_id = radio_config.get("id", "0")
-    frequency = radio_config.get("freq", "433.92M")
     radio_name = radio_config.get("name", f"RTL_{device_id}")
     sample_rate = radio_config.get("rate", "250k")
+    
+    # 1. Frequency Parsing (Supports list, comma-string, or single string)
+    raw_freq = radio_config.get("freq", "433.92M")
+    frequencies = []
+    
+    if isinstance(raw_freq, list):
+        frequencies = [str(f) for f in raw_freq]
+    else:
+        # Handle "433.92M, 315M" or simple "433.92M"
+        frequencies = [f.strip() for f in str(raw_freq).split(",")]
+
+    # 2. Hop Interval
+    hop_interval = radio_config.get("hop_interval")
 
     # --- Names & IDs ---
     status_field = f"radio_status_{device_id}"
     status_friendly_name = f"{radio_name}"
     sys_name = f"{sys_model} ({sys_id})"
 
-    # CMD
-    # UPDATED: Added "-F", "log" so warnings/errors appear in stdout
-    # alongside the JSON data.
-    cmd = [
-        "rtl_433", "-d", f":{device_id}", "-f", frequency, "-s", sample_rate,
-        "-F", "json", "-F", "log", "-M", "time:iso", "-M", "protocol", "-M", "level",
-    ]
+    # --- Build Command ---
+    cmd = ["rtl_433", "-d", f":{device_id}"]
 
-    print(f"[RTL] Manager started for {radio_name}. Monitoring...")
+    # Add Frequencies
+    for f in frequencies:
+        cmd.extend(["-f", f])
+
+    # Add Hop Interval (Only if multiple frequencies exist)
+    if len(frequencies) > 1 and hop_interval:
+        cmd.extend(["-H", str(hop_interval)])
+
+    # Standard Args
+    cmd.extend([
+        "-s", sample_rate,
+        "-F", "json", "-F", "log", 
+        "-M", "time:iso", "-M", "protocol", "-M", "level"
+    ])
+
+    print(f"[RTL] Manager started for {radio_name}. Freqs: {frequencies} | Hopping: {hop_interval if len(frequencies)>1 else 'Off'}")
 
     while True:
         # 1. Announce "Scanning"

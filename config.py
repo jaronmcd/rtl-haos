@@ -28,10 +28,22 @@ class Settings(BaseSettings):
         default=60, description="MQTT keepalive interval in seconds"
     )
 
-    # RTL-SDR Configuration
-    # For multiple radios, set via code or keep empty for auto-detection
+    # --- RTL-SDR Configuration ---
+    
+    # 1. Advanced: List of specific radio configurations (JSON/List of Dicts)
+    # Example: [{"id": "0", "freq": "433.92M, 315M", "hop_interval": 60}]
     rtl_config: list[dict] = Field(
         default_factory=list, description="List of RTL-SDR radio configurations"
+    )
+
+    # 2. Simple: Defaults for Auto-Detection (Used if rtl_config is empty)
+    rtl_default_freq: str = Field(
+        default="433.92M",
+        description="Default frequency or comma-separated list (e.g. '433.92M, 315M')"
+    )
+    rtl_default_hop_interval: int = Field(
+        default=60,
+        description="Hop interval in seconds. Only active if multiple frequencies are set."
     )
 
     bridge_id: str = Field(
@@ -39,7 +51,7 @@ class Settings(BaseSettings):
         description="Static unique ID for the bridge"
     )
 
-    # NEW: Friendly Display Name
+    # Friendly Display Name
     bridge_name: str = Field(
         default="rtl-haos-bridge", 
         description="The friendly name shown in Home Assistant"
@@ -126,7 +138,6 @@ class Settings(BaseSettings):
 settings = Settings()
 
 BRIDGE_ID = settings.bridge_id
-
 BRIDGE_NAME = settings.bridge_name
 
 # Convenience aliases for backward compatibility
@@ -147,3 +158,7 @@ FORCE_NEW_IDS = settings.force_new_ids
 ID_SUFFIX = settings.id_suffix
 DEBUG_RAW_JSON = settings.debug_raw_json
 RTL_THROTTLE_INTERVAL = settings.rtl_throttle_interval
+
+# EXPORT NEW DEFAULTS
+RTL_DEFAULT_FREQ = settings.rtl_default_freq
+RTL_DEFAULT_HOP_INTERVAL = settings.rtl_default_hop_interval

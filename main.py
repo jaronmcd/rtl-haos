@@ -8,6 +8,8 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
+  - UPDATED: Auto Mode now uses global defaults for Freq/Hopping.
+  - UPDATED: Version entity removed (now part of Device Info).
 """
 import builtins
 from datetime import datetime
@@ -78,8 +80,8 @@ def main():
     ver = get_version()
     print(f"--- RTL-HAOS ({ver}) ---")
 
-    # 1. START MQTT
-    mqtt_handler = HomeNodeMQTT()
+    # 1. START MQTT (With Version Info)
+    mqtt_handler = HomeNodeMQTT(version=ver)
     mqtt_handler.start()
 
     # 2. START DATA PROCESSOR (Handles Buffering/Throttling)
@@ -88,24 +90,14 @@ def main():
 
     # 3. GET SYSTEM IDENTITY
     sys_id = get_system_mac().replace(":", "").lower() 
-    sys_model = config.BRIDGE_NAME  # <--- No longer socket.gethostname()
+    sys_model = config.BRIDGE_NAME
     sys_name = f"{sys_model} ({sys_id})"
 
-    # 4. PUBLISH VERSION ENTITY
-    mqtt_handler.send_sensor(
-        sys_id, 
-        "RTL-HAOS_version", 
-        ver, 
-        sys_name, 
-        sys_model, 
-        is_rtl=False
-    )
-
-    # 5. START RTL RADIO THREADS
+    # 4. START RTL RADIO THREADS
     rtl_config = getattr(config, "RTL_CONFIG", None)
 
     if rtl_config:
-        # Explicit radios from config.py
+        # Explicit radios from config.py (Advanced Mode)
         for radio in rtl_config:
             threading.Thread(
                 target=rtl_loop,
@@ -114,14 +106,26 @@ def main():
                 daemon=True,
             ).start()
     else:
-        # AUTO MODE: Detect single radio
+        # AUTO MODE: Detect single radio & Apply Defaults
         auto_serial = discover_default_rtl_serial()
+        
+        # Build the radio config dict
         if auto_serial:
             print(f"[STARTUP] Auto-detected RTL-SDR serial: {auto_serial}")
-            auto_radio = {"name": f"RTL_{auto_serial}", "id": auto_serial}
+            auto_radio = {
+                "name": f"RTL_{auto_serial}", 
+                "id": auto_serial,
+                "freq": config.RTL_DEFAULT_FREQ,             # <--- INJECTED
+                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL # <--- INJECTED
+            }
         else:
             print("[STARTUP] Using default RTL-SDR id '0'")
-            auto_radio = {"name": "RTL_auto", "id": "0"}
+            auto_radio = {
+                "name": "RTL_auto", 
+                "id": "0",
+                "freq": config.RTL_DEFAULT_FREQ,             # <--- INJECTED
+                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL # <--- INJECTED
+            }
 
         threading.Thread(
             target=rtl_loop,
@@ -129,14 +133,14 @@ def main():
             daemon=True,
         ).start()
 
-    # 6. START SYSTEM MONITOR
+    # 5. START SYSTEM MONITOR
     threading.Thread(
         target=system_stats_loop, 
         args=(mqtt_handler, sys_id, sys_model), 
         daemon=True
     ).start()
 
-    # 7. MAIN LOOP
+    # 6. MAIN LOOP
     try:
         while True: time.sleep(1)
     except KeyboardInterrupt:

@@ -1,6 +1,6 @@
 name: "RTL-HAOS"
 description: "RTL-SDR to Home Assistant MQTT bridge with signal diagnostics and system monitoring"
-version: "1.0.32"
+version: "1.0.34"
 slug: rtl-haos
 url: "https://github.com/jaronmcd/rtl-haos"
 arch:
@@ -22,11 +22,29 @@ options:
   rtl_expire_after: 600
   rtl_throttle_interval: 30
   debug_raw_json: false
+  
+  # --- Global Radio Defaults ---
+  # These settings apply to the auto-detected radio if 'rtl_config' is empty.
+  # Frequencies: "433.92M" or "433.92M, 315M, 868M"
+  rtl_default_freq: "433.92M"
+  # Hop Interval: Seconds to stay on each frequency (if multiple are set)
+  rtl_default_hop_interval: 60
+  
+  # --- Advanced Radio Configuration ---
+  # Define specific radios by ID. Leave empty to use auto-detection + defaults.
+  # Example:
+  # - name: "Hopping Radio"
+  #   id: "101"
+  #   freq: "315M, 915M"
+  #   hop_interval: 60
+  #   rate: "1000k"  <-- Optional: Increase bandwidth (default is 250k)
   rtl_config: []
+  
   device_blacklist:
     - "SimpliSafe*"
     - "EezTire*"
   device_whitelist: []
+
 schema:
   mqtt_host: str
   mqtt_port: port
@@ -37,11 +55,14 @@ schema:
   rtl_expire_after: int
   rtl_throttle_interval: int
   debug_raw_json: bool
+  rtl_default_freq: str
+  rtl_default_hop_interval: int
   rtl_config:
     - name: str
       id: str
       freq: str
       rate: str?
+      hop_interval: int?
   device_blacklist:
     - str
   device_whitelist:

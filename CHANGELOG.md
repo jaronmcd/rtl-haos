@@ -1,4 +1,7 @@
 # Changelog
+## v1.0.34
+- **NEW:** Now supports Frequency Hopping via 'hop_interval' and multiple frequencies.
+- **NEW:** Replaced rtl-haos revision entity with Device info
 ## v1.0.32
 - **NEW:** Added "-F", "log" so warnings/errors appear in stdout alongside the JSON data.
 - **FIX:** Improved radio status will not become unavailable.

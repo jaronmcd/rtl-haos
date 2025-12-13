@@ -4,8 +4,9 @@ FILE: mqtt_handler.py
 DESCRIPTION:
   Manages the connection to the MQTT Broker.
   - UPDATED: 
-    1. 'Nuke' now immediately resurrects the Host Bridge entities.
-    2. 'radio_status' entities no longer expire (timeout) in HA.
+    1. Accepts 'version' in __init__ to populate Device Info (firmware).
+    2. 'Nuke' now immediately resurrects the Host Bridge entities.
+    3. 'radio_status' entities no longer expire (timeout) in HA.
 """
 import json
 import threading
@@ -19,7 +20,8 @@ from utils import clean_mac, get_system_mac
 from field_meta import FIELD_META
 
 class HomeNodeMQTT:
-    def __init__(self):
+    def __init__(self, version="Unknown"):
+        self.sw_version = version  # Store version for device registry
         self.client = mqtt.Client(callback_api_version=CallbackAPIVersion.VERSION2)
         self.TOPIC_AVAILABILITY = f"home/status/rtl_bridge{config.ID_SUFFIX}/availability"
         self.client.username_pw_set(config.MQTT_SETTINGS["user"], config.MQTT_SETTINGS["pass"])
@@ -104,7 +106,8 @@ class HomeNodeMQTT:
                 "identifiers": [f"rtl433_{config.BRIDGE_NAME}_{sys_id}"],
                 "manufacturer": "rtl-haos",
                 "model": config.BRIDGE_NAME,
-                "name": f"{config.BRIDGE_NAME} ({sys_id})"
+                "name": f"{config.BRIDGE_NAME} ({sys_id})",
+                "sw_version": self.sw_version  # Inject Version Here
             },
             "availability_topic": self.TOPIC_AVAILABILITY
         }
@@ -214,16 +217,23 @@ class HomeNodeMQTT:
             if sensor_name.startswith("radio_status"):
                 entity_cat = None
 
+            # --- DEVICE REGISTRY ---
+            device_registry = {
+                "identifiers": [f"rtl433_{device_model}_{unique_id.split('_')[0]}"],
+                "manufacturer": "rtl-haos",
+                "model": device_model,
+                "name": device_name 
+            }
+            
+            # Inject Firmware Version ONLY for the Bridge itself
+            if device_model == config.BRIDGE_NAME:
+                device_registry["sw_version"] = self.sw_version
+
             payload = {
                 "name": friendly_name,
                 "state_topic": state_topic,
                 "unique_id": unique_id,
-                "device": {
-                    "identifiers": [f"rtl433_{device_model}_{unique_id.split('_')[0]}"],
-                    "manufacturer": "rtl-haos",
-                    "model": device_model,
-                    "name": device_name 
-                },
+                "device": device_registry,
                 "icon": icon,
             }
 
