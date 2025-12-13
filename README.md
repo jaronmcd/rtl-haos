@@ -325,6 +325,8 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 #### 3. Install Dependencies
 
 ```bash
+# Update your Shell
+source ~/.bashrc
 # From the rtl-haos directory
 uv sync
 ```

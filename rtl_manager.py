@@ -76,8 +76,12 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     Parses JSON output and passes it to data_processor.dispatch_reading().
     """
     # --- Radio Config Parsing ---
-    device_id = radio_config.get("id", "0")
-    radio_name = radio_config.get("name", f"RTL_{device_id}")
+    # UPDATED: 'id' is now optional. 
+    # If missing, we use '0' for naming, but OMIT the -d flag in the command.
+    device_id = radio_config.get("id")
+    naming_id = device_id if device_id else "0"
+
+    radio_name = radio_config.get("name", f"RTL_{naming_id}")
     sample_rate = radio_config.get("rate", "250k")
     
     # 1. Frequency Parsing (Supports list, comma-string, or single string)
@@ -94,17 +98,20 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     hop_interval = radio_config.get("hop_interval")
 
     # --- Names & IDs ---
-    status_field = f"radio_status_{device_id}"
+    status_field = f"radio_status_{naming_id}"
     status_friendly_name = f"{radio_name}"
     sys_name = f"{sys_model} ({sys_id})"
 
     # --- Build Command ---
-    cmd = ["rtl_433", "-d", f":{device_id}"]
+    cmd = ["rtl_433"]
+    
+    # Only add device flag if specifically requested
+    if device_id:
+        cmd.extend(["-d", f":{device_id}"])
 
     # Add Frequencies
     for f in frequencies:
         cmd.extend(["-f", f])
-
     # Add Hop Interval (Only if multiple frequencies exist)
     if len(frequencies) > 1 and hop_interval:
         cmd.extend(["-H", str(hop_interval)])
