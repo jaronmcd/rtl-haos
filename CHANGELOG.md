@@ -4,7 +4,6 @@
 - **NEW:** Added `BRIDGE_ID` configuration to keep the Device ID static across reboots.
 - **NEW:** Added `BRIDGE_NAME` to allow custom friendly names (ignoring the Docker hostname).
 - **NEW:** Improved log printout.
-- **FIX:** Fixed issue where Home Assistant created duplicate devices after every restart.
 - **FIX:** Improved stability of the RTL-SDR auto-detection.
 - **FIX:** rtl-haos revision entity should not time out.
 
