@@ -4,9 +4,8 @@ FILE: mqtt_handler.py
 DESCRIPTION:
   Manages the connection to the MQTT Broker.
   - UPDATED: 
-    1. REMOVED dynamic feedback/status sensors (Clean version).
-    2. Button is static: "Nuke (Press 5x)".
-    3. Requires 5 rapid presses to detonate.
+    1. 'Nuke' now immediately resurrects the Host Bridge entities 
+       (Status, Button, Availability) so the UI doesn't look broken.
 """
 import json
 import threading
@@ -52,7 +51,7 @@ class HomeNodeMQTT:
             self.nuke_command_topic = f"home/status/rtl_bridge{config.ID_SUFFIX}/nuke/set"
             c.subscribe(self.nuke_command_topic)
             
-            # 2. Publish the Nuke Button (Static)
+            # 2. Publish the Nuke Button
             self._publish_nuke_button()
         else:
             print(f"[MQTT] Connection Failed! Code: {rc}")
@@ -96,11 +95,11 @@ class HomeNodeMQTT:
         unique_id = f"rtl_bridge_nuke{config.ID_SUFFIX}"
         
         payload = {
-            "name": "Delete Entities (Press 5x)",
+            "name": "⚠️ Nuke (Press 5x)",
             "command_topic": self.nuke_command_topic,
             "unique_id": unique_id,
             "icon": "mdi:delete-alert",
-            "entity_category": "config",  # Keep in config to reduce clutter
+            "entity_category": "config",
             "device": {
                 "identifiers": [f"rtl433_{config.BRIDGE_NAME}_{sys_id}"],
                 "manufacturer": "rtl-haos",
@@ -151,6 +150,7 @@ class HomeNodeMQTT:
         self.is_nuking = False
         self.client.unsubscribe("homeassistant/+/+/config")
         
+        # 1. Clear Internal Memory (So we know to re-publish everything)
         with self.discovery_lock:
             self.discovery_published.clear()
             self.last_sent_values.clear()
@@ -158,8 +158,14 @@ class HomeNodeMQTT:
 
         print(f"[NUKE] Scan Complete. All identified entities removed.")
         
-        # Re-publish the Nuke button immediately so it doesn't disappear
+        # 2. IMMEDIATE RESURRECTION
+        # Re-assert that the Bridge is online
+        self.client.publish(self.TOPIC_AVAILABILITY, "online", retain=True)
+        
+        # Re-publish the Nuke Button immediately (so it doesn't vanish)
         self._publish_nuke_button()
+        
+        print("[NUKE] Host Entities restored. Sensor data (CPU/RAM) will return shortly.")
 
     def start(self):
         print(f"[STARTUP] Connecting to MQTT Broker at {config.MQTT_SETTINGS['host']}...")
