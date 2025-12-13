@@ -8,14 +8,14 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
-  - UPDATED: Auto Mode now uses global defaults for Freq/Hopping.
-  - UPDATED: Version entity removed (now part of Device Info).
+  - UPDATED: Added ASCII Startup Logo with a 3-second pause.
 """
 import builtins
 from datetime import datetime
 
 # --- 1. GLOBAL TIMESTAMP OVERRIDE ---
 # Save the original print function so we don't cause an infinite recursion
+# AND so we can print the logo without timestamps.
 _original_print = builtins.print
 
 def timestamped_print(*args, **kwargs):
@@ -76,24 +76,42 @@ def get_version():
         pass
     return "Unknown"
 
+def show_logo(version):
+    """Prints the ASCII logo using the original print function (no timestamps)."""
+    logo = r"""
+  ____  _____  _         _   _    _    ___  ____  
+ |  _ \|_   _|| |       | | | |  / \  / _ \/ ___| 
+ | |_) | | |  | |  ___  | |_| | / _ \| | | \___ \ 
+ |  _ <  | |  | | |___| |  _  |/ ___ \ |_| |___) |
+ |_| \_\ |_|  |_____|   |_| |_/_/   \_\___/|____/ 
+    """
+    _original_print("\033[1;36m" + logo + "\033[0m") # Cyan Color
+    _original_print(f"   \033[1;37m>>> RTL-SDR Bridge for Home Assistant ({version}) <<<\033[0m")
+    _original_print("   --------------------------------------------------\n")
+
 def main():
     ver = get_version()
-    print(f"--- RTL-HAOS ({ver}) ---")
+    
+    # 1. SHOW LOGO (Clean, no timestamps)
+    show_logo(ver)
+    
+    # PAUSE FOR EFFECT (3 Seconds)
+    time.sleep(3)
 
-    # 1. START MQTT (With Version Info)
+    # 2. START MQTT (With Version Info)
     mqtt_handler = HomeNodeMQTT(version=ver)
     mqtt_handler.start()
 
-    # 2. START DATA PROCESSOR (Handles Buffering/Throttling)
+    # 3. START DATA PROCESSOR (Handles Buffering/Throttling)
     processor = DataProcessor(mqtt_handler)
     threading.Thread(target=processor.start_throttle_loop, daemon=True).start()
 
-    # 3. GET SYSTEM IDENTITY
+    # 4. GET SYSTEM IDENTITY
     sys_id = get_system_mac().replace(":", "").lower() 
     sys_model = config.BRIDGE_NAME
     sys_name = f"{sys_model} ({sys_id})"
 
-    # 4. START RTL RADIO THREADS
+    # 5. START RTL RADIO THREADS
     rtl_config = getattr(config, "RTL_CONFIG", None)
 
     if rtl_config:
@@ -133,14 +151,14 @@ def main():
             daemon=True,
         ).start()
 
-    # 5. START SYSTEM MONITOR
+    # 6. START SYSTEM MONITOR
     threading.Thread(
         target=system_stats_loop, 
         args=(mqtt_handler, sys_id, sys_model), 
         daemon=True
     ).start()
 
-    # 6. MAIN LOOP
+    # 7. MAIN LOOP
     try:
         while True: time.sleep(1)
     except KeyboardInterrupt:

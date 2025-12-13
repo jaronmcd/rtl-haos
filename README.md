@@ -52,7 +52,7 @@ graph TD
     end
 
     %% MQTT Broker
-    F -->|Filtered & Formatted JSON| G("<b>MQTT Broker</b><br/>(External or HAOS Add-on)")
+    F -->|MQTT Discovery JSON + state topics| G("<b>MQTT Broker</b><br/>(External or HAOS Add-on)")
 
     subgraph "Home Assistant"
         G -->|MQTT Auto-Discovery| J(<b>Sensor Entities</b>)
@@ -80,36 +80,42 @@ graph TD
 ```
 
 ---
-
 ## 📸 Screenshots
 
-<div align="center">
+### System Health & Entity View
 
-**System Health & Entity View**
-<br />
-<img src="https://github.com/user-attachments/assets/723a5454-4876-4f86-af86-a10b3bba516e" height="400" alt="System Monitor" />
-<img src="https://github.com/user-attachments/assets/04939cba-dfa0-44fb-bb33-2c50db6a13ad" height="400" alt="Entity View" />
+| System Monitor | Entity View |
+|---|---|
+| ![System Monitor](https://github.com/user-attachments/assets/723a5454-4876-4f86-af86-a10b3bba516e) | ![Entity View](https://github.com/user-attachments/assets/04939cba-dfa0-44fb-bb33-2c50db6a13ad) |
 
-**Signal Diagnosis (SNR, RSSI, Noise)**
-<br />
-<img src="https://github.com/user-attachments/assets/93a22bc7-aa6f-4f88-8bdf-276ecb7cf383" width="30%" alt="SNR" />
-<img src="https://github.com/user-attachments/assets/a1138265-e95d-41ec-a02b-93030a0e4824" width="30%" alt="RSSI" />
-<img src="https://github.com/user-attachments/assets/1a262af2-2273-40ce-9e9a-c5baac6ded78" width="30%" alt="Noise Floor" />
+### Signal Diagnosis (SNR, RSSI, Noise)
 
-<p><em>The signal boost between 8:00 AM and 5:00 PM is due to the AcuRite 5-in-1 internal supercapacitor charging via solar panel.</em></p>
+![SNR](https://github.com/user-attachments/assets/93a22bc7-aa6f-4f88-8bdf-276ecb7cf383)
+![RSSI](https://github.com/user-attachments/assets/a1138265-e95d-41ec-a02b-93030a0e4824)
+![Noise Floor](https://github.com/user-attachments/assets/1a262af2-2273-40ce-9e9a-c5baac6ded78)
 
-**Historical Efficacy Diagnosis**
-<br />
-<img src="https://github.com/user-attachments/assets/267d057e-c6a8-4c96-9b92-6a268efd7a4a" width="100%" alt="Historical Data" />
+_The signal boost between 8:00 AM and 5:00 PM is due to the AcuRite 5-in-1 internal supercapacitor charging via solar panel._
 
-</div>
+### Historical Efficacy Diagnosis
+
+![Historical Data](https://github.com/user-attachments/assets/267d057e-c6a8-4c96-9b92-6a268efd7a4a)
+
 
 ---
 
-## 📂 Project Layout
+## 📂 Project Layout (high-level)
 
-- `main.py` – Main script. Starts rtl_433 processes, system monitor, and MQTT publishing.
-- `.env.example` – Template for environment variables. Copy to `.env`.
+- `main.py` – Main entrypoint (starts radio manager(s), MQTT publishing, system monitoring).
+- `rtl_manager.py` – Spawns/monitors `rtl_433` process(es) and handles multi-radio orchestration.
+- `mqtt_handler.py` – MQTT connection + Home Assistant MQTT Discovery publishing.
+- `system_monitor.py` / `sensors_system.py` – Host stats + radio status publishing.
+- `field_meta.py` – Field metadata (units, device_class/state_class, icons, etc.).
+- `utils.py` – Shared helpers (IDs, formatting, derived fields like dew point, etc.).
+- `docker-compose.yml` – Docker/Compose runtime.
+- `repository.yaml` – Home Assistant add-on repository descriptor.
+
+> Note: The repo may also contain legacy scripts/config templates (e.g., `rtl_mqtt_bridge.py`, `config.example.py`). If they’re kept, document them as legacy; otherwise remove them to avoid user confusion.
+
 
 ---
 
@@ -213,9 +219,14 @@ Go to the **Configuration** tab and set your options:
 
 ```yaml
 # MQTT Settings
-mqtt_host: core-mosquitto # Leave blank to auto-use HA MQTT service
+mqtt_host: "" # Leave blank to auto-use HA MQTT service (mqtt:want). Or set to "core-mosquitto" / your broker IP/hostname.
 mqtt_user: your_mqtt_user
 mqtt_pass: your_mqtt_password
+
+bridge_name: "rtl-haos-bridge"        # unique ID for system metrics device
+
+rtl_default_freq: "433.92M"           # or "433.92M, 315M, 915M"
+rtl_default_hop_interval: 60          # only used when multiple freqs set
 ```
 
 > **Note:** The add-on will automatically use the Home Assistant MQTT service if available and `mqtt_host` is left blank.
@@ -358,6 +369,28 @@ uv run python main.py
 
 ---
 
+
+## 🧨 Maintenance: The "Nuke" Button
+
+If you change batteries or remove devices, old entities may linger in Home Assistant. RTL-HAOS provides a cleanup tool.
+
+
+1. Navigate to **Settings** → **Devices** → **RTL-HAOS Bridge**
+2. Find the button **"Delete Entities (Press 5x)".**
+3. Press it **5 times within 5 seconds.**
+   
+What happens?
+  -  The bridge scans the MQTT broker for all entities it created.
+  -  It sends empty payloads to remove the "Discovery" configs.
+  -  Home Assistant instantly removes the devices.
+  -  Valid devices will reappear automatically the next time they transmit data.
+
+    
+
+    
+
+---
+
 ## 🔧 Advanced: Multi-Radio Setup (Critical)
 
 If you plan to use multiple RTL-SDR dongles (e.g., one for 433MHz and one for 915MHz), you **must** assign them unique serial numbers. By default, most dongles share the serial `00000001`, which causes conflicts where the system swaps "Radio A" and "Radio B" after a reboot.
@@ -426,7 +459,7 @@ To keep the bridge running 24/7 using the native installation method, use `syste
       ExecStartPre=/bin/sleep 10
 
       # CHANGE THESE PATHS to match your virtual environment and script location
-      ExecStart=.venv/bin/python3 main.py
+      ExecStart=/home/pi/rtl-haos/.venv/bin/python3 /home/pi/rtl-haos/main.py
 
       # Restart automatically if it crashes
       Restart=on-failure
@@ -453,9 +486,9 @@ To keep the bridge running 24/7 using the native installation method, use `syste
 
 ---
 
-## ❓ Troubleshooting
 
-- **"Service Fails to Start (Exit Code Error)**
+## ❓ Troubleshooting
+- **"Service Fails to Start" (Exit Code Error)**
   - Check your username in the service file. If your terminal says user@hostname, your User= line must be user, not pi
   - Verify paths. Run ls /home/YOUR_USER/rtl-haos to make sure the folder exists.
   - Check the logs: journalctl -u rtl-bridge.service -b
@@ -464,6 +497,12 @@ To keep the bridge running 24/7 using the native installation method, use `syste
   - Run `lsusb` to verify it is plugged in.
   - Ensure you are not running another instance of `rtl_433` in the background.
   - The ExecStartPre=/bin/sleep 10 line in the service file usually fixes this by waiting for the USB to wake up on reboot.
+  - Hard reset your Hardware or Virtual Machine.
 - **"Kernel driver is active" Error:**
   - Linux loaded the default TV tuner driver. You need to blacklist it.
   - Run: `echo "blacklist dvb_usb_rtl28xxu" | sudo tee /etc/modprobe.d/blacklist-rtl.conf` and reboot.
+- **Sensors updates are slow:**
+  - Check `RTL_THROTTLE_INTERVAL`. Default is 30 seconds. Set to 0 for instant updates (not recommended for noisy environments).
+- **Ghost Devices won't delete:**
+  - Use the "Nuke" button (press 5x quickly).
+  - If that fails, use an MQTT explorer to delete topics under `homeassistant/sensor/rtl433_....`
