@@ -4,8 +4,8 @@ FILE: mqtt_handler.py
 DESCRIPTION:
   Manages the connection to the MQTT Broker.
   - UPDATED: 
-    1. 'Nuke' now immediately resurrects the Host Bridge entities 
-       (Status, Button, Availability) so the UI doesn't look broken.
+    1. 'Nuke' now immediately resurrects the Host Bridge entities.
+    2. 'radio_status' entities no longer expire (timeout) in HA.
 """
 import json
 import threading
@@ -238,8 +238,10 @@ class HomeNodeMQTT:
             if device_class in ["wind_direction"]:
                 payload["state_class"] = "measurement_angle"
 
-            if "version" not in sensor_name.lower():
+            # UPDATED: Disable expiration for radio_status so it doesn't go Unavailable during silence
+            if "version" not in sensor_name.lower() and not sensor_name.startswith("radio_status"):
                 payload["expire_after"] = config.RTL_EXPIRE_AFTER
+            
             payload["availability_topic"] = self.TOPIC_AVAILABILITY
 
             config_topic = f"homeassistant/sensor/{unique_id}/config"

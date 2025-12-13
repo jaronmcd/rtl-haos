@@ -1,4 +1,7 @@
 # Changelog
+## v1.0.32a1
+- **FIX:** Improved radio status will not become unavailable.
+
 ## v1.0.31
 - **NEW:** Added entity cleanup under host device.
 ## v1.0.19
