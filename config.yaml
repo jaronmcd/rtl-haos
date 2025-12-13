@@ -51,7 +51,7 @@ schema:
 
   rtl_config:
     - name: str
-      id: str
+      id: str?
       freq: str
       rate: str?
       hop_interval: int?
