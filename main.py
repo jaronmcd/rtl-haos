@@ -8,8 +8,7 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
-  - UPDATED: Imports new multi-device discovery function.
-  - UPDATED: Added 5s Stagger Delay to prevent USB Race Conditions.
+  - UPDATED: Auto-Mode now only starts the FIRST detected radio (Single Device Mode).
 """
 import builtins
 from datetime import datetime
@@ -114,29 +113,30 @@ def main():
             print("[STARTUP] Staggering next radio start by 5 seconds...")
             time.sleep(5)
     else:
-        # AUTO MODE: Detect ALL radios & Apply Defaults
+        # AUTO MODE: Detect radios but ONLY START THE FIRST ONE
         detected_radios = discover_rtl_devices()
         
         if detected_radios:
+            # --- CHANGED: Pick only the first device ---
+            target_radio = detected_radios[0]
+            
             print(f"[STARTUP] Auto-detected {len(detected_radios)} radios.")
-            for dr in detected_radios:
-                # Merge defaults into the detected device dict
-                radio_setup = {
-                    "freq": config.RTL_DEFAULT_FREQ,
-                    "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
-                    "rate": config.RTL_DEFAULT_RATE
-                }
-                radio_setup.update(dr) # Overwrite with detected name/id
+            print(f"[STARTUP] Unconfigured Mode: Selecting first device only ({target_radio['name']}).")
+            
+            # Merge defaults into the detected device dict
+            radio_setup = {
+                "freq": config.RTL_DEFAULT_FREQ,
+                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
+                "rate": config.RTL_DEFAULT_RATE
+            }
+            radio_setup.update(target_radio) # Overwrite with detected name/id
 
-                threading.Thread(
-                    target=rtl_loop,
-                    args=(radio_setup, mqtt_handler, processor, sys_id, sys_model),
-                    daemon=True,
-                ).start()
+            threading.Thread(
+                target=rtl_loop,
+                args=(radio_setup, mqtt_handler, processor, sys_id, sys_model),
+                daemon=True,
+            ).start()
                 
-                # STAGGER DELAY: Prevents USB Race Conditions
-                print(f"[STARTUP] Initializing {dr['name']}... waiting 5s before next.")
-                time.sleep(5) 
         else:
             # FALLBACK: No devices found via EEPROM, try blindly forcing ID 0
             print("[STARTUP] No serials detected. Defaulting to generic device '0'.")
