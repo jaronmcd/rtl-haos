@@ -68,7 +68,12 @@ def get_version():
     return "Unknown"
 
 def show_logo(version):
-    """Prints the ASCII logo using the original print function (no timestamps)."""
+    """Prints the ASCII logo with forced ANSI colors."""
+    # ANSI Colors
+    CYAN = "\033[1;36m"
+    WHITE = "\033[1;37m"
+    RESET = "\033[0m"
+
     logo = r"""
   ____  _____  _         _   _    _    ___  ____  
  |  _ \|_   _|| |       | | | |  / \  / _ \/ ___| 
@@ -76,10 +81,15 @@ def show_logo(version):
  |  _ <  | |  | | |___| |  _  |/ ___ \ |_| |___) |
  |_| \_\ |_|  |_____|   |_| |_/_/   \_\___/|____/ 
     """
-    _original_print("\033[1;36m" + logo + "\033[0m") 
-    _original_print(f"   \033[1;37m>>> RTL-SDR Bridge for Home Assistant ({version}) <<<\033[0m")
+    
+    # Use _original_print to bypass the timestamp override
+    _original_print(f"{CYAN}{logo}{RESET}") 
+    _original_print(f"   {WHITE}>>> RTL-SDR Bridge for Home Assistant ({version}) <<<{RESET}")
     _original_print("   --------------------------------------------------\n")
-
+    
+    # CRITICAL: Flush stdout so Docker/HA logs catch the color immediately
+    sys.stdout.flush()
+    
 def main():
     ver = get_version()
     show_logo(ver)
