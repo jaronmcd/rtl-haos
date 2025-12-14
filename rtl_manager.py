@@ -341,11 +341,19 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                 is_rtl=True, friendly_name=status_friendly_name
             )
 
-        # --- NEW: Smart Restart Delay ---
-        # If returncode is -15 (SIGTERM), it was a manual restart.
+        # --- NEW: Restart Logic ---
         if proc and proc.returncode == -15:
             print(f"[{radio_name}] Fast restart triggered.")
-            time.sleep(1)
+            mqtt_handler.send_sensor(
+                sys_id, 
+                status_field, 
+                "Rebooting...", 
+                sys_name, 
+                sys_model, 
+                is_rtl=True, 
+                friendly_name=status_friendly_name
+            )
+            time.sleep(2)
         else:
             print(f"[{radio_name}] Retrying in 30 seconds...")
             time.sleep(30)
