@@ -8,8 +8,7 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
-  - UPDATED: Maps Manual Config Serial Numbers to Physical Indices.
-  - UPDATED: Logo Blue, Subtitle Purple, Version Yellow.
+  - UPDATED: Smart Logging (Switches to Yellow WARNING if detected).
 """
 import os
 import sys
@@ -31,18 +30,30 @@ c_blue   = "\x1b[34m"    # Standard Blue
 c_purple = "\x1b[35m"    # Standard Purple
 c_green  = "\x1b[32m"    # Standard Green
 c_yellow = "\x1b[33m"    # Standard Yellow
+c_red    = "\x1b[31m"    # Standard Red
 c_reset  = "\x1b[0m"
 
 _original_print = builtins.print
 
 def timestamped_print(*args, **kwargs):
     """
-    Replica of HAOS Logging format:
-    [HH:MM:SS] INFO: <Message>
+    Replica of HAOS Logging format with Level Detection:
+    - If message contains "warning", uses Yellow WARNING: tag.
+    - If message contains "critical" or "error", uses Red WARNING: tag.
+    - Otherwise, uses Green INFO: tag.
     """
     now = datetime.now().strftime("%H:%M:%S")
-    prefix = f"[{now}] {c_green}INFO:{c_reset}"
     msg = " ".join(map(str, args))
+    lower_msg = msg.lower()
+    
+    # Determine Color/Tag based on content
+    if "warning" in lower_msg:
+        prefix = f"[{now}] {c_yellow}WARNING:{c_reset}"
+    elif "critical" in lower_msg or "error" in lower_msg or "failed" in lower_msg or "crashed" in lower_msg:
+        prefix = f"[{now}] {c_red}WARNING:{c_reset}"
+    else:
+        prefix = f"[{now}] {c_green}INFO:{c_reset}"
+    
     _original_print(f"{prefix} {msg}", flush=True, **kwargs)
 
 # Override the built-in print
@@ -83,7 +94,7 @@ def get_version():
     return "Unknown"
 
 def show_logo(version):
-    """Prints the ASCII logo (Blue) and Subtitle (Purple/Yellow) with correct spacing."""
+    """Prints the ASCII logo (Blue) and Subtitle (Purple/Yellow)."""
     logo_lines = [
         r"   ____  _____  _         _   _    _    ___  ____  ",
         r"  |  _ \|_   _|| |       | | | |  / \  / _ \/ ___| ",
@@ -96,26 +107,19 @@ def show_logo(version):
     for line in logo_lines:
         sys.stdout.write(f"{c_blue}{line}{c_reset}\n")
     
-    # 2. SPACER (Between Logo and Text)
+    # 2. SPACER
     sys.stdout.write("\n")
     
-    # 3. Print Subtitle: Mix Purple and Yellow
-    # ">>> RTL-SDR Bridge for Home Assistant (" is Purple
-    # "vX.X.X" is Yellow
-    # ") <<<" is Purple
+    # 3. Print Subtitle: Purple & Yellow
     sys.stdout.write(
         f"{c_purple}>>> RTL-SDR Bridge for Home Assistant ({c_reset}"
         f"{c_yellow}{version}{c_reset}"
         f"{c_purple}) <<<{c_reset}\n"
     )
     
-    # 4. Print Separator
+    # 4. Separator
     sys.stdout.write("\n")
-    
-    # 5. Bottom Spacer (before logs start)
     sys.stdout.write("\n")
-    
-    # 6. Force Flush
     sys.stdout.flush()
 
 def main():
