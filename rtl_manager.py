@@ -113,21 +113,20 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     Runs the rtl_433 process in a loop.
     Parses JSON output and passes it to data_processor.dispatch_reading().
     """
-    # --- CLEAN CONFIG MAPPING ---
-    device_id = radio_config.get("Serial")
+    device_id = radio_config.get("id")
     if device_id: device_id = str(device_id).strip()
 
     device_index = radio_config.get("index")
     naming_id = device_id if device_id else "0"
 
-    radio_name = radio_config.get("Name")
+    radio_name = radio_config.get("name")
     if not radio_name:
         radio_name = f"RTL_{naming_id}"
     
     # Defaults
-    sample_rate = radio_config.get("Sample_Rate") or "250k"
-    raw_freq = radio_config.get("Frequency") or "433.92M"
-    hop_interval = radio_config.get("Hop_Seconds")
+    sample_rate = radio_config.get("rate") or "250k"
+    raw_freq = radio_config.get("freq") or "433.92M"
+    hop_interval = radio_config.get("hop_interval")
     
     frequencies = []
     if isinstance(raw_freq, list):

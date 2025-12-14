@@ -121,14 +121,13 @@ def main():
         print(f"[STARTUP] Loading {len(rtl_config)} radios from manual config.")
         
         for radio in rtl_config:
-            # CLEAN UPDATE: Use 'Serial' (Capitalized)
-            target_id = radio.get("Serial") 
+            target_id = radio.get("id") 
             if target_id: target_id = str(target_id).strip()
             
             if target_id and target_id in serial_to_index:
                 idx = serial_to_index[target_id]
                 radio['index'] = idx
-                r_name = radio.get("Name", "Unknown")
+                r_name = radio.get("name", "Unknown")
                 print(f"[STARTUP] Matched Config '{r_name}' (Serial {target_id}) to Physical Index {idx}")
             else:
                 if target_id:

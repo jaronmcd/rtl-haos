@@ -167,7 +167,7 @@ MQTT_PASS=password
 For multiple RTL-SDR dongles on different frequencies:
 
 ```bash
-# Multiple radios (id should match dongle serial)
+# Multiple radios 
 RTL_CONFIG='[{"name": "Weather Radio", "id": "101", "freq": "433.92M", "rate": "250k"}, {"name": "Utility Meter", "id": "102", "freq": "915M", "rate": "250k"}]'
 ```
 

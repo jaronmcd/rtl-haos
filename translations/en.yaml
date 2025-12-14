@@ -34,21 +34,21 @@ configuration:
     description: >-
       Advanced: Define multiple radios manually. Click 'Add' to configure a new stick.
     keys:
-      Name:
+      name:
         name: Radio Name
         description: A short, friendly name (e.g., 'Weather', 'Utility'). Used in logs and sensor names.
-      Frequency:
+      freq:
         name: Frequency
         description: The frequency to listen on (e.g., '433.92M', '915M'). Don't forget the 'M'!
-      Serial:
+      id:
         name: Device Serial (Optional)
         description: >-
           The specific USB Serial Number (e.g., '101', '102') to use. 
           Leave empty to auto-assign based on order.
-      Sample_Rate:
+      rate:
         name: Sample Rate (Optional)
         description: Default is '250k'. Only change if you know what you are doing.
-      Hop_Seconds:
+      hop_interval:
         name: Hop Interval (Optional)
         description: If listening to multiple frequencies on one radio, how often to switch (in seconds).
   # ---------------------
