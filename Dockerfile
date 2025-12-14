@@ -48,5 +48,6 @@ RUN chmod a+x /run.sh
 # Use the virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
+ENV TERM=xterm-256color
 
 CMD [ "/run.sh" ]
