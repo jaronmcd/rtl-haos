@@ -226,7 +226,7 @@ class HomeNodeMQTT:
             }
 
             if device_model != config.BRIDGE_NAME:
-                device_registry["via_device"] = "rtl433_"+config.BRIDGE_NAME+"_"config.BRIDGE_ID
+                device_registry["via_device"] = "rtl433_"+config.BRIDGE_NAME+"_"+config.BRIDGE_ID
                             
             # Inject Firmware Version ONLY for the Bridge itself
             if device_model == config.BRIDGE_NAME:
