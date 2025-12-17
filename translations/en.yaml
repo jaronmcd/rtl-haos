@@ -32,5 +32,5 @@ configuration:
   device_whitelist:
     name: Device Whitelist
     description: >-
-      If set, only these device patterns are allowed. Leave empty to allow all
+      If set, only these device patterns (based on the model or id number) are allowed. Leave empty to allow all
       devices (except blacklisted ones).

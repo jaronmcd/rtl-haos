@@ -39,7 +39,12 @@ options:
   #   hop_interval: 60
   #   rate: "1000k"  <-- Optional: Increase bandwidth (default is 250k)
   rtl_config: []
-  
+
+  # --- Device Filtering ---
+  # Define specific Devices or ID Numbers to allow or disallow
+  # Example:
+  # - "Acurite 5n1*"
+  # - "*8675*"
   device_blacklist:
     - "SimpliSafe*"
     - "EezTire*"
