@@ -71,6 +71,10 @@ FIELD_META = {
     "strike_distance":      ("km", "distance", "mdi:flash-alert", "Storm Distance"),
     "storm_dist":           ("km", "distance", "mdi:flash-alert", "Storm Distance"),
 
+    # --- Soil Moisture ---
+    "moisture":            ("%", "moisture", "mdi:water-percent", "Soil Moisture"),
+    
+
     # --- Radio Diagnostics ---
     "freq":                 ("MHz", "frequency", "mdi:sine-wave", "Frequency"),
     "freq1":                ("MHz", "frequency", "mdi:sine-wave", "Frequency"),
