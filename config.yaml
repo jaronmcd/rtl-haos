@@ -1,6 +1,6 @@
 name: "RTL-HAOS"
 description: "RTL-SDR to Home Assistant MQTT bridge with signal diagnostics and system monitoring"
-version: "1.1"
+version: "1.1.1"
 slug: rtl-haos
 url: "https://github.com/jaronmcd/rtl-haos"
 arch:
@@ -23,6 +23,8 @@ options:
   rtl_throttle_interval: 30
   debug_raw_json: false
   rtl_show_timestamps: false
+  verbose_transmissions: false  # <--- ADDED DEFAULT VALUE
+  
   # --- DELETED GLOBAL DEFAULTS ---
   # rtl_default_freq, rtl_default_hop_interval, rtl_default_rate are gone.
   # Users must now use rtl_config below to change these.
@@ -50,9 +52,9 @@ schema:
   rtl_expire_after: int
   rtl_throttle_interval: int
   debug_raw_json: bool
-
-
   rtl_show_timestamps: bool
+  verbose_transmissions: bool   # <--- ADDED DATA TYPE
+
   # --- DELETED GLOBAL SCHEMA ---
   # The UI will no longer show the 3 text boxes for defaults.
 

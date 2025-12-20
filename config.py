@@ -43,10 +43,15 @@ class Settings(BaseSettings):
     bridge_id: str = Field(default="42")
     bridge_name: str = Field(default="rtl-haos-bridge")
 
-    # --- NEW: TOGGLE FOR TIMESTAMPS ---
     rtl_show_timestamps: bool = Field(
         default=False, 
         description="If True, shows 'Last: HH:MM:SS'. If False, shows 'Online'."
+    )
+    
+    # --- NEW: VERBOSE TOGGLE ---
+    verbose_transmissions: bool = Field(
+        default=False, 
+        description="If True, logs every single MQTT publish. If False, only logs periodic summaries."
     )
 
     skip_keys: list[str] = Field(default_factory=lambda: ["time", "protocol", "mod", "id"])
@@ -98,5 +103,7 @@ RTL_THROTTLE_INTERVAL = settings.rtl_throttle_interval
 RTL_DEFAULT_FREQ = settings.rtl_default_freq
 RTL_DEFAULT_HOP_INTERVAL = settings.rtl_default_hop_interval
 RTL_DEFAULT_RATE = settings.rtl_default_rate
-# EXPORT THE NEW SETTING
 RTL_SHOW_TIMESTAMPS = settings.rtl_show_timestamps
+
+# EXPORT NEW SETTING
+VERBOSE_TRANSMISSIONS = settings.verbose_transmissions

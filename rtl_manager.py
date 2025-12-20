@@ -2,7 +2,7 @@
 FILE: rtl_manager.py
 DESCRIPTION:
   Manages the 'rtl_433' subprocess interactions.
-  - UPDATED: Raw JSON output now tagged with [DEBUG] for Blue logs.
+  - UPDATED: Now passes 'radio_name' to data_processor for better logging.
 """
 import subprocess
 import json
@@ -13,19 +13,17 @@ from datetime import datetime
 import config
 from utils import clean_mac, calculate_dew_point
 
-# --- NEW: Simple Process Tracking ---
+# --- Process Tracking ---
 ACTIVE_PROCESSES = []
 
 def trigger_radio_restart():
-    """Terminates all running radios. The loop detects this via exit code."""
+    """Terminates all running radios."""
     print("[RTL] User requested restart. Stopping processes...")
     for p in list(ACTIVE_PROCESSES):
         if p.poll() is None:
             p.terminate()
-# ------------------------------------
 
 def flatten(d, sep="_") -> dict:
-    """Recursively flattens a nested dictionary."""
     obj = {}
     def recurse(t, parent: str = ""):
         if isinstance(t, list):
@@ -49,29 +47,19 @@ def is_blocked_device(clean_id: str, model: str, dev_type: str) -> bool:
     return False
 
 def discover_rtl_devices():
-    """
-    Scans for ALL connected RTL-SDR devices by iterating indices (0-7).
-    """
     devices = []
     index = 0
-    
-    # Check up to 8 devices
     while index < 8:
         try:
-            # Check specific slot index
             proc = subprocess.run(
                 ["rtl_eeprom", "-d", str(index)],
-                capture_output=True,
-                text=True,
-                timeout=5,
+                capture_output=True, text=True, timeout=5,
             )
         except FileNotFoundError:
             print("[STARTUP] WARNING: rtl_eeprom not found; cannot auto-detect.")
             break
         
         output = (proc.stdout or "") + (proc.stderr or "")
-        
-        # Stop if we hit an index that doesn't exist
         if "No supported devices" in output or "No matching device" in output:
             break
 
@@ -87,29 +75,15 @@ def discover_rtl_devices():
         
         if serial:
             print(f"[STARTUP] Found RTL-SDR at index {index}: Serial {serial}")
-            devices.append({
-                "name": f"RTL_{serial}",
-                "id": serial,
-                "index": index 
-            })
+            devices.append({"name": f"RTL_{serial}", "id": serial, "index": index})
         else:
             if proc.returncode == 0:
-                fallback_id = str(index)
-                devices.append({
-                    "name": f"RTL_Index_{index}", 
-                    "id": fallback_id,
-                    "index": index
-                })
+                devices.append({"name": f"RTL_Index_{index}", "id": str(index), "index": index})
 
         index += 1
-
     return devices
 
 def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_model: str) -> None:
-    """
-    Runs the rtl_433 process in a loop.
-    Parses JSON output and passes it to data_processor.dispatch_reading().
-    """
     device_id = radio_config.get("id")
     if device_id: device_id = str(device_id).strip()
 
@@ -131,7 +105,7 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     else:
         frequencies = [f.strip() for f in str(raw_freq).split(",")]
 
-# --- SAFETY CHECK FOR UNITS ---
+    # Safety Check for Units
     for f in frequencies:
         if f.endswith("m"):
              print(f"[{radio_name}] WARNING: Frequency '{f}' uses lowercase 'm' (milli). Did you mean '{f.upper()}' (Mega)?")
@@ -148,7 +122,6 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     sys_name = f"{sys_model} ({sys_id})"
 
     cmd = ["rtl_433"]
-    
     if device_index is not None:
         cmd.extend(["-d", str(device_index)])
         print(f"[{radio_name}] Selecting by Index: {device_index}")
@@ -170,16 +143,14 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
 
     print(f"[RTL] Manager started for {radio_name}. Freqs: {frequencies}")
 
-    # --- SHARED STATE ---
     state = {
         "last_packet": time.time(),
         "current_display": "Scanning...",
         "last_mqtt_update": 0
     }
 
-    # --- WATCHDOG (10 MINUTE TIMEOUT) ---
+    # Watchdog
     def watchdog_loop():
-        """Checks if radio is silent for > 600s (10 mins)."""
         while True:
             time.sleep(10)
             time_since_last = time.time() - state["last_packet"]
@@ -194,7 +165,6 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     threading.Thread(target=watchdog_loop, daemon=True).start()
 
     while True:
-        # Reset on Loop Start
         state["current_display"] = "Scanning..."
         mqtt_handler.send_sensor(
             sys_id, status_field, "Scanning...", sys_name, sys_model, 
@@ -207,8 +177,6 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
         
         try:
             proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
-            
-            # --- NEW: Track Process ---
             ACTIVE_PROCESSES.append(proc) 
 
             for line in proc.stdout:
@@ -218,21 +186,14 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                 if "usb_open error" in safe_line or "No supported devices" in safe_line or "No matching device" in safe_line:
                     print(f"[{radio_name}] WARNING: Hardware missing! Device not found.")
                     state["current_display"] = "No Device"
-                    mqtt_handler.send_sensor(
-                        sys_id, status_field, "No Device", sys_name, sys_model, 
-                        is_rtl=True, friendly_name=status_friendly_name
-                    )
+                    mqtt_handler.send_sensor(sys_id, status_field, "No Device", sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
                 
                 elif "Kernel driver is active" in safe_line or "LIBUSB_ERROR_BUSY" in safe_line:
                     print(f"[{radio_name}] WARNING: USB Busy/Driver Error!")
                     state["current_display"] = "USB Error"
-                    mqtt_handler.send_sensor(
-                        sys_id, status_field, "USB Error", sys_name, sys_model, 
-                        is_rtl=True, friendly_name=status_friendly_name
-                    )
+                    mqtt_handler.send_sensor(sys_id, status_field, "USB Error", sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
 
                 elif safe_line.startswith("{") and safe_line.endswith("}"):
-                    # --- PACKET RECEIVED ---
                     now = time.time()
                     state["last_packet"] = now
                     
@@ -244,17 +205,11 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                             ts = datetime.now().strftime("%H:%M:%S")
                             display_str = f"Last: {ts}"
                             state["current_display"] = display_str
-                            mqtt_handler.send_sensor(
-                                sys_id, status_field, display_str, sys_name, sys_model, 
-                                is_rtl=True, friendly_name=status_friendly_name
-                            )
+                            mqtt_handler.send_sensor(sys_id, status_field, display_str, sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
                     else:
                         if state["current_display"] != "Online":
                             state["current_display"] = "Online"
-                            mqtt_handler.send_sensor(
-                                sys_id, status_field, "Online", sys_name, sys_model, 
-                                is_rtl=True, friendly_name=status_friendly_name
-                            )
+                            mqtt_handler.send_sensor(sys_id, status_field, "Online", sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
 
                     try:
                         data = json.loads(safe_line)
@@ -278,17 +233,17 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                     else:
                         if is_blocked_device(clean_id, model, dev_type): continue
 
-                    # --- UPDATED: Add [DEBUG] tag to raw output ---
                     if getattr(config, "DEBUG_RAW_JSON", False):
                         print(f"[DEBUG] [{radio_name}] RX: {safe_line}")
 
+                    # --- UPDATED: Pass radio_name to all dispatch calls ---
                     if "Neptune-R900" in model and data.get("consumption") is not None:
                         real_val = float(data["consumption"]) / 10.0
-                        data_processor.dispatch_reading(clean_id, "meter_reading", real_val, dev_name, model)
+                        data_processor.dispatch_reading(clean_id, "meter_reading", real_val, dev_name, model, radio_name=radio_name)
                         del data["consumption"]
 
                     if ("SCM" in model or "ERT" in model) and data.get("consumption") is not None:
-                        data_processor.dispatch_reading(clean_id, "Consumption", data["consumption"], dev_name, model)
+                        data_processor.dispatch_reading(clean_id, "Consumption", data["consumption"], dev_name, model, radio_name=radio_name)
                         del data["consumption"]
 
                     t_c = None
@@ -300,7 +255,7 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                     if t_c is not None and data.get("humidity") is not None:
                         dp_f = calculate_dew_point(t_c, data["humidity"])
                         if dp_f is not None:
-                            data_processor.dispatch_reading(clean_id, "dew_point", dp_f, dev_name, model)
+                            data_processor.dispatch_reading(clean_id, "dew_point", dp_f, dev_name, model, radio_name=radio_name)
 
                     flat = flatten(data)
                     for key, value in flat.items():
@@ -308,11 +263,11 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                         
                         if key in ["temperature_C", "temp_C"] and isinstance(value, (int, float)):
                             val_f = round(value * 1.8 + 32.0, 1)
-                            data_processor.dispatch_reading(clean_id, "temperature", val_f, dev_name, model)
+                            data_processor.dispatch_reading(clean_id, "temperature", val_f, dev_name, model, radio_name=radio_name)
                         elif key in ["temperature_F", "temp_F", "temperature"] and isinstance(value, (int, float)):
-                            data_processor.dispatch_reading(clean_id, "temperature", value, dev_name, model)
+                            data_processor.dispatch_reading(clean_id, "temperature", value, dev_name, model, radio_name=radio_name)
                         else:
-                            data_processor.dispatch_reading(clean_id, key, value, dev_name, model)
+                            data_processor.dispatch_reading(clean_id, key, value, dev_name, model, radio_name=radio_name)
                 
                 else:
                     if safe_line:
@@ -320,39 +275,22 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                         print(f"[{radio_name} LOG] {safe_line}")
 
             if proc: proc.wait()
-            
-            # --- NEW: Untrack Process ---
             if proc in ACTIVE_PROCESSES: ACTIVE_PROCESSES.remove(proc)
 
             if proc.returncode != 0 and proc.returncode != -15:
                 state["current_display"] = "Crashed"
                 error_msg = f"Crashed: {last_log_line}" if last_log_line else f"Crashed Code {proc.returncode}"
                 print(f"[{radio_name}] WARNING: Process exited with code {proc.returncode}")
-                mqtt_handler.send_sensor(
-                    sys_id, status_field, error_msg[:255], sys_name, sys_model, 
-                    is_rtl=True, friendly_name=status_friendly_name
-                )
+                mqtt_handler.send_sensor(sys_id, status_field, error_msg[:255], sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
 
         except Exception as e:
             state["current_display"] = "Crashed"
             print(f"[{radio_name}] WARNING: Exception: {e}")
-            mqtt_handler.send_sensor(
-                sys_id, status_field, "Script Error", sys_name, sys_model, 
-                is_rtl=True, friendly_name=status_friendly_name
-            )
+            mqtt_handler.send_sensor(sys_id, status_field, "Script Error", sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
 
-        # --- NEW: Restart Logic ---
         if proc and (proc.returncode == -15 or proc.returncode == 0):
             print(f"[{radio_name}] Fast restart triggered.")
-            mqtt_handler.send_sensor(
-                sys_id, 
-                status_field, 
-                "Rebooting...", 
-                sys_name, 
-                sys_model, 
-                is_rtl=True, 
-                friendly_name=status_friendly_name
-            )
+            mqtt_handler.send_sensor(sys_id, status_field, "Rebooting...", sys_name, sys_model, is_rtl=True, friendly_name=status_friendly_name)
             time.sleep(10)
         else:
             print(f"[{radio_name}] WARNING: Retrying in 30 seconds...")

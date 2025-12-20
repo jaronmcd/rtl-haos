@@ -2,17 +2,17 @@ configuration:
   mqtt_host:
     name: MQTT Host
     description: >-
-      MQTT broker hostname or IP address. Leave empty to auto-detect
-      Home Assistant's MQTT service.
+      The hostname or IP address of the MQTT broker. Leave this empty to auto-detect
+      the internal Home Assistant Mosquitto service.
   mqtt_port:
     name: MQTT Port
-    description: MQTT broker port number.
+    description: The port number for the MQTT broker (default is 1883).
   mqtt_user:
     name: MQTT Username
-    description: Username for MQTT authentication.
+    description: The username required for MQTT authentication (if applicable).
   mqtt_pass:
     name: MQTT Password
-    description: Password for MQTT authentication.
+    description: The password required for MQTT authentication (if applicable).
   bridge_id:
     name: Bridge ID
     description: >-
@@ -28,9 +28,14 @@ configuration:
       If enabled, the Radio Status sensor will show "Last: HH:MM:SS" (updating every 5s).
       If disabled, it will show a static "Online" status (cleaner log).
       WARNING: Enabling this may increase log size significantly over time.
+  
+  verbose_transmissions:
+    name: Verbose Transmissions
+    description: >-
+      If enabled, every single sensor update sent to MQTT will be logged to the console.
+      If disabled (default), only a summary line ("Flushed X readings...") is printed
+      every throttle interval.
 
-
-  # --- UPDATED TO MATCH CAPITALIZED KEYS ---
   rtl_config:
     name: Radio Configuration
     description: >-
@@ -53,7 +58,6 @@ configuration:
       hop_interval:
         name: Hop Interval (Optional)
         description: If listening to multiple frequencies on one radio, how often to switch (in seconds).
-  # ---------------------
 
   rtl_expire_after:
     name: Sensor Expiry
@@ -65,15 +69,22 @@ configuration:
     description: >-
       Seconds to buffer readings before publishing. Set to 0 for real-time
       updates, or higher (e.g., 30) to average readings and reduce database size.
+  
+  # --- UPDATED SECTION ---
   debug_raw_json:
-    name: JSON output
-    description: Print raw rtl_433 JSON output to the log.
+    name: Debug Raw JSON
+    description: >-
+      If enabled, the raw JSON data received from rtl_433 will be printed to the add-on logs.
+      Useful for troubleshooting or identifying the IDs of new devices.
+  # -----------------------
+
   device_blacklist:
     name: Device Blacklist
     description: >-
-      Device patterns to ignore (supports wildcards). Example: SimpliSafe*, EezTire*
+      A list of device patterns to ignore (supports wildcards). 
+      Example: 'SimpliSafe*', 'EezTire*'
   device_whitelist:
     name: Device Whitelist
     description: >-
-      If set, only these device patterns (based on the model or id number) are allowed. Leave empty to allow all
-      devices (except blacklisted ones).
+      If set, ONLY these device patterns (model or ID) will be processed. 
+      Leave empty to allow all devices (except those in the blacklist).
