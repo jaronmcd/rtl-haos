@@ -1,4 +1,6 @@
 # Changelog
+## v1.1.3
+- **FIX:** crash fix
 ## v1.1.2
 - **NEW:** Add support for blocking devices based on type.
 ## v1.1.1
