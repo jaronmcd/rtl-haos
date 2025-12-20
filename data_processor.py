@@ -1,9 +1,11 @@
+# data_processor.py
 """
 FILE: data_processor.py
 DESCRIPTION:
   Handles data buffering, throttling, and averaging to reduce MQTT traffic.
   - dispatch_reading(): Adds data to buffer or sends immediately if throttling is 0.
   - start_throttle_loop(): Runs in a background thread to flush averages.
+  - UPDATED: Now provides consolidated summary logs.
 """
 import threading
 import time
@@ -94,5 +96,7 @@ class DataProcessor:
                     self.mqtt_handler.send_sensor(clean_id, field, final_val, dev_name, model, is_rtl=True)
                     count_sent += 1
             
-            if getattr(config, "DEBUG_RAW_JSON", False) and count_sent > 0:
-                print(f"[THROTTLE] Flushed {count_sent} averaged readings.")
+            # --- NEW: Consolidated "Heartbeat" Log ---
+            # This runs every 30s (default) and confirms data is flowing without spamming.
+            if count_sent > 0:
+                print(f"[THROTTLE] Flushed {count_sent} averaged readings to MQTT.")

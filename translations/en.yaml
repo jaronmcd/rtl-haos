@@ -28,9 +28,16 @@ configuration:
       If enabled, the Radio Status sensor will show "Last: HH:MM:SS" (updating every 5s).
       If disabled, it will show a static "Online" status (cleaner log).
       WARNING: Enabling this may increase log size significantly over time.
+  
+  # --- NEW SETTING ---
+  verbose_transmissions:
+    name: Verbose Transmissions
+    description: >-
+      If enabled, every single sensor update sent to MQTT will be logged to the console.
+      If disabled (default), only a summary line ("Flushed X readings...") is printed
+      every throttle interval.
+  # -------------------
 
-
-  # --- UPDATED TO MATCH CAPITALIZED KEYS ---
   rtl_config:
     name: Radio Configuration
     description: >-
@@ -53,7 +60,6 @@ configuration:
       hop_interval:
         name: Hop Interval (Optional)
         description: If listening to multiple frequencies on one radio, how often to switch (in seconds).
-  # ---------------------
 
   rtl_expire_after:
     name: Sensor Expiry

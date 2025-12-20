@@ -3,7 +3,7 @@
 FILE: mqtt_handler.py
 DESCRIPTION:
   Manages the connection to the MQTT Broker.
-  - UPDATED: Added "Restart Radios" button support.
+  - UPDATED: Now respects VERBOSE_TRANSMISSIONS setting.
 """
 import json
 import threading
@@ -15,7 +15,7 @@ from paho.mqtt.enums import CallbackAPIVersion
 import config
 from utils import clean_mac, get_system_mac
 from field_meta import FIELD_META
-from rtl_manager import trigger_radio_restart  # <--- NEW IMPORT
+from rtl_manager import trigger_radio_restart
 
 class HomeNodeMQTT:
     def __init__(self, version="Unknown"):
@@ -51,13 +51,13 @@ class HomeNodeMQTT:
             self.nuke_command_topic = f"home/status/rtl_bridge{config.ID_SUFFIX}/nuke/set"
             c.subscribe(self.nuke_command_topic)
             
-            # 2. Subscribe to Restart Command (NEW)
+            # 2. Subscribe to Restart Command
             self.restart_command_topic = f"home/status/rtl_bridge{config.ID_SUFFIX}/restart/set"
             c.subscribe(self.restart_command_topic)
             
             # 3. Publish Buttons
             self._publish_nuke_button()
-            self._publish_restart_button() # <--- NEW
+            self._publish_restart_button()
         else:
             print(f"[MQTT] Connection Failed! Code: {rc}")
 
@@ -69,7 +69,7 @@ class HomeNodeMQTT:
                 self._handle_nuke_press()
                 return
 
-            # 2. Handle Restart Button Press (NEW)
+            # 2. Handle Restart Button Press
             if msg.topic == self.restart_command_topic:
                 trigger_radio_restart()
                 return
@@ -124,7 +124,7 @@ class HomeNodeMQTT:
         self.client.publish(config_topic, json.dumps(payload), retain=True)
 
     def _publish_restart_button(self):
-        """Creates the 'Restart Radios' button. (NEW)"""
+        """Creates the 'Restart Radios' button."""
         sys_id = get_system_mac().replace(":", "").lower()
         unique_id = f"rtl_bridge_restart{config.ID_SUFFIX}"
         
@@ -186,7 +186,7 @@ class HomeNodeMQTT:
         print(f"[NUKE] Scan Complete. All identified entities removed.")
         self.client.publish(self.TOPIC_AVAILABILITY, "online", retain=True)
         self._publish_nuke_button()
-        self._publish_restart_button() # <--- Restore this too
+        self._publish_restart_button()
         print("[NUKE] Host Entities restored.")
 
     def start(self):
@@ -297,4 +297,6 @@ class HomeNodeMQTT:
             self.client.publish(state_topic, str(value), retain=True)
             self.last_sent_values[unique_id_v2] = value
             if value_changed:
-                print(f" -> TX {device_name} [{field}]: {value}")
+                # --- NEW: Check Verbosity Setting ---
+                if config.VERBOSE_TRANSMISSIONS:
+                    print(f" -> TX {device_name} [{field}]: {value}")
