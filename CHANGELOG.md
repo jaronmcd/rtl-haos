@@ -1,4 +1,6 @@
 # Changelog
+## v1.1.5
+- **FIX:** crash & JSON debug fix
 ## v1.1.3
 - **FIX:** crash fix
 ## v1.1.2

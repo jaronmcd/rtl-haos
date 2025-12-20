@@ -165,7 +165,9 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
 
                 try:
                     data = json.loads(line)
-                    
+                    if config.DEBUG_RAW_JSON:
+                        # "DEBUG" tag triggers the colorizer in main.py
+                        print(f"[DEBUG] {line.strip()}")
                     # 1. Basic Extraction
                     model = data.get("model", "Unknown")
                     raw_id = data.get("id", "Unknown")
