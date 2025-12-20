@@ -1,4 +1,7 @@
 # Changelog
+## v1.1.1
+- **NEW:** verbose log toggle
+- **NEW:** automatic secondary RTL-433 configured at 915Mhz
 ## v1.1
 - **NEW:** Improved management of multiple radios
 - **NEW:** Color log with colors for WARNING, ERROR, INFO, DEBUG
