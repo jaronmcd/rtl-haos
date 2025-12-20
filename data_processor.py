@@ -5,7 +5,7 @@ DESCRIPTION:
   Handles data buffering, throttling, and averaging to reduce MQTT traffic.
   - dispatch_reading(): Adds data to buffer or sends immediately if throttling is 0.
   - start_throttle_loop(): Runs in a background thread to flush averages.
-  - UPDATED: Now groups summary stats by Radio Name.
+  - UPDATED: Now accepts and logs 'radio_freq'.
 """
 import threading
 import time
@@ -18,7 +18,8 @@ class DataProcessor:
         self.buffer = {}
         self.lock = threading.Lock()
 
-    def dispatch_reading(self, clean_id, field, value, dev_name, model, radio_name="Unknown"):
+    # --- FIX 1: Add radio_freq to arguments ---
+    def dispatch_reading(self, clean_id, field, value, dev_name, model, radio_name="Unknown", radio_freq="Unknown"):
         """
         Ingests a sensor reading.
         If throttling is disabled (interval <= 0), sends immediately.
@@ -37,15 +38,16 @@ class DataProcessor:
                 self.buffer[clean_id] = {}
             
             # Store metadata so we know who this device is when flushing
-            # We update 'radio' every time to track who heard it last/most recently
             if "__meta__" not in self.buffer[clean_id]:
                 self.buffer[clean_id]["__meta__"] = {
                     "name": dev_name, 
                     "model": model, 
-                    "radio": radio_name
+                    "radio": radio_name,
+                    "freq": radio_freq  # --- FIX 2: Store the frequency ---
                 }
             else:
                 self.buffer[clean_id]["__meta__"]["radio"] = radio_name
+                self.buffer[clean_id]["__meta__"]["freq"] = radio_freq
             
             if field not in self.buffer[clean_id]:
                 self.buffer[clean_id][field] = []
@@ -82,6 +84,7 @@ class DataProcessor:
                 dev_name = meta.get("name", "Unknown")
                 model = meta.get("model", "Unknown")
                 r_name = meta.get("radio", "Unknown")
+                r_freq = meta.get("freq", "")
 
                 for field, values in device_data.items():
                     if field == "__meta__": 
@@ -104,11 +107,15 @@ class DataProcessor:
                     self.mqtt_handler.send_sensor(clean_id, field, final_val, dev_name, model, is_rtl=True)
                     count_sent += 1
                     
-                    # Increment Tally for this Radio
-                    stats_by_radio[r_name] = stats_by_radio.get(r_name, 0) + 1
+                    # --- FIX 3: Group by Radio + Frequency for the log ---
+                    key = f"{r_name}"
+                    if r_freq and r_freq != "Unknown":
+                        key = f"{r_name}[{r_freq}]"
+                        
+                    stats_by_radio[key] = stats_by_radio.get(key, 0) + 1
             
             # --- Consolidated Heartbeat Log ---
             if count_sent > 0:
-                # Format: (RadioA: 5, RadioB: 3)
+                # Format: (RTL_101[915M]: 5, RTL_001[433.92M]: 3)
                 details = ", ".join([f"{k}: {v}" for k, v in stats_by_radio.items()])
                 print(f"[THROTTLE] Flushed {count_sent} readings ({details})")
