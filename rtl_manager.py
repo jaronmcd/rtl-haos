@@ -173,9 +173,10 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                     raw_id = data.get("id", "Unknown")
                     clean_id = clean_mac(raw_id)
                     dev_name = f"{model} {clean_id}"
+                    dev_type = data.get("type", "Untyped")
 
                     # 2. Check Blacklist
-                    if is_blocked_device(clean_id, model, "rtl433"):
+                    if is_blocked_device(clean_id, model, dev_type):
                         continue
 
                     # 3. Check Whitelist (if enabled)
