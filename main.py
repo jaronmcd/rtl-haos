@@ -8,10 +8,10 @@ DESCRIPTION:
   - Starts Data Processor (Throttling).
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
-  - UPDATED: Auto-discovery now sets:
+  - UPDATED: Auto-discovery logic:
       Radio 1 -> 433.92M
-      Radio 2 -> 915M
-      Radio 3 -> 315M
+      Radio 2 -> 915M (1000k)
+      Radio 3+ -> Defaults to 433.92M + "Suggest Manual Config" log.
 """
 import os
 import sys
@@ -281,19 +281,19 @@ def main():
                     "rate": config.RTL_DEFAULT_RATE
                 }
                 
-                # 2. Smart Logic: Radio 1 = 433, Radio 2 = 915, Radio 3 = 315
+                # 2. Smart Logic: Radio 1 = 433, Radio 2 = 915, Others = Default
                 if i == 0:
                     radio_setup["freq"] = config.RTL_DEFAULT_FREQ # Default 433.92M
                     print(f"[STARTUP] Radio #{i+1} ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
                 elif i == 1:
                     radio_setup["freq"] = "915M"
-                    print(f"[STARTUP] Radio #{i+1} ({dev['name']}) -> Auto-Setting to 915M (North America ISM)")
-                elif i == 2:
-                    radio_setup["freq"] = "315M"
-                    print(f"[STARTUP] Radio #{i+1} ({dev['name']}) -> Auto-Setting to 315M (Legacy/Security)")
+                    radio_setup["rate"] = "1000k"
+                    print(f"[STARTUP] Radio #{i+1} ({dev['name']}) -> Auto-Setting to 915M (1000k)")
                 else:
+                    # Fallback for Radio 3+
                     radio_setup["freq"] = config.RTL_DEFAULT_FREQ
                     print(f"[STARTUP] Radio #{i+1} ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
+                    print(f"[STARTUP] Hint: If this device is for 315M or 868M, please configure it manually in options.")
 
                 # 3. Merge Device Info and Launch
                 radio_setup.update(dev)
