@@ -1,4 +1,6 @@
 # Changelog
+## v1.1.8
+- **NEW:** Added warning when no sdr hardware is detected
 ## v1.1.7
 - **NEW:** Configuration warnings improvments.
 ## v1.1.6
