@@ -1,4 +1,6 @@
 # Changelog
+## v1.1.9  
+- **FIX:** Added -M level back to rtl_433 cmd for radio signal metrics
 ## v1.1.8
 - **NEW:** Added warning when no sdr hardware is detected
 ## v1.1.7

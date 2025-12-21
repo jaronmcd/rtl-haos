@@ -99,7 +99,7 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
     radio_id = radio_config.get("id", "0")
     
     # 1. Build Command
-    cmd = ["rtl_433", "-F", "json"]
+    cmd = ["rtl_433", "-F", "json", "-M", "level"]
 
     # Device selection (-d)
     # If we have a mapped index (from discovery), use it. Otherwise use the raw ID.
