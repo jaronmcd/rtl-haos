@@ -9,8 +9,8 @@ DESCRIPTION:
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
   - UPDATED: Auto-discovery logic:
-      ALL Radios -> Default to config.RTL_DEFAULT_FREQ (433.92M)
-      (Removed special 915M handling for 2nd radio)
+      If unconfigured -> Start ONLY the first detected radio.
+      (Ignores secondary radios to prevent frequency conflicts unless configured).
 """
 import os
 import sys
@@ -271,29 +271,33 @@ def main():
         # --- B. SMART AUTO-CONFIGURATION MODE ---
         if detected_devices:
             print(f"[STARTUP] Auto-detected {len(detected_devices)} radios.")
-            print(f"[STARTUP] Unconfigured Mode: Auto-assigning default frequency...")
+            print(f"[STARTUP] Unconfigured Mode: Starting PRIMARY radio only.")
 
-            for i, dev in enumerate(detected_devices):
-                # 1. Base Setup (Uniform for ALL devices)
-                radio_setup = {
-                    "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
-                    "rate": config.RTL_DEFAULT_RATE,
-                    "freq": config.RTL_DEFAULT_FREQ  # Always use default (433.92M)
-                }
-                
-                print(f"[STARTUP] Radio #{i+1} ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
+            # Grab the first device only
+            dev = detected_devices[0]
 
-                # 2. Merge Device Info and Launch
-                radio_setup.update(dev)
+            # 1. Base Setup (Uniform)
+            radio_setup = {
+                "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
+                "rate": config.RTL_DEFAULT_RATE,
+                "freq": config.RTL_DEFAULT_FREQ
+            }
+            
+            print(f"[STARTUP] Radio #1 ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
+            
+            # Warn if others exist
+            if len(detected_devices) > 1:
+                print(f"[STARTUP] Note: {len(detected_devices)-1} other device(s) ignored in auto-mode. Configure them in options.json to use.")
 
-                threading.Thread(
-                    target=rtl_loop,
-                    args=(radio_setup, mqtt_handler, processor, sys_id, sys_model),
-                    daemon=True,
-                ).start()
-                
-                # Stagger startup to avoid USB power spikes
-                time.sleep(5)
+            # 2. Merge Device Info and Launch
+            radio_setup.update(dev)
+
+            threading.Thread(
+                target=rtl_loop,
+                args=(radio_setup, mqtt_handler, processor, sys_id, sys_model),
+                daemon=True,
+            ).start()
+            
         else:
             print("[STARTUP] No serials detected. Defaulting to generic device '0'.")
             auto_radio = {
