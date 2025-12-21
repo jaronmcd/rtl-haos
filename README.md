@@ -115,8 +115,6 @@ _The signal boost between 8:00 AM and 5:00 PM is due to the AcuRite 5-in-1 inter
 - `docker-compose.yml` – Docker/Compose runtime.
 - `repository.yaml` – Home Assistant add-on repository descriptor.
 
-> Note: The repo may also contain legacy scripts/config templates (e.g., `rtl_mqtt_bridge.py`, `config.example.py`). If they’re kept, document them as legacy; otherwise remove them to avoid user confusion.
-
 
 ---
 
