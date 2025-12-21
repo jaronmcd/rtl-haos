@@ -121,7 +121,12 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
 
     # Hop Interval (-H)
     hop_interval = radio_config.get("hop_interval", config.RTL_DEFAULT_HOP_INTERVAL)
+    
+    # --- NEW LOGIC: Auto-enable hopping if needed ---
     if len(frequencies) > 1:
+        # If user provided multiple freqs but hop is 0, default to 60s
+        if hop_interval <= 0:
+            hop_interval = 60
         cmd.extend(["-H", str(hop_interval)])
 
     # Sample Rate (-s)

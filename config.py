@@ -32,7 +32,7 @@ class Settings(BaseSettings):
     mqtt_port: int = Field(default=1883)
     mqtt_user: str = Field(default="")
     mqtt_pass: str = Field(default="")
-    mqtt_keepalive: int = Field(default=60)
+    mqtt_keepalive: int = Field(default=0)
 
     # --- RTL-SDR Configuration ---
     rtl_config: list[dict] = Field(default_factory=list)
