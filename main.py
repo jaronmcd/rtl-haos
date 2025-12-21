@@ -9,9 +9,8 @@ DESCRIPTION:
   - Starts RTL Managers (Radios).
   - Starts System Monitor.
   - UPDATED: Auto-discovery logic:
-      Radio 1 -> 433.92M
-      Radio 2 -> 915M (1000k)
-      Radio 3+ -> Defaults to 433.92M + "Suggest Manual Config" log.
+      ALL Radios -> Default to config.RTL_DEFAULT_FREQ (433.92M)
+      (Removed special 915M handling for 2nd radio)
 """
 import os
 import sys
@@ -272,30 +271,19 @@ def main():
         # --- B. SMART AUTO-CONFIGURATION MODE ---
         if detected_devices:
             print(f"[STARTUP] Auto-detected {len(detected_devices)} radios.")
-            print(f"[STARTUP] Unconfigured Mode: Auto-assigning frequencies...")
+            print(f"[STARTUP] Unconfigured Mode: Auto-assigning default frequency...")
 
             for i, dev in enumerate(detected_devices):
-                # 1. Base Setup
+                # 1. Base Setup (Uniform for ALL devices)
                 radio_setup = {
                     "hop_interval": config.RTL_DEFAULT_HOP_INTERVAL,
-                    "rate": config.RTL_DEFAULT_RATE
+                    "rate": config.RTL_DEFAULT_RATE,
+                    "freq": config.RTL_DEFAULT_FREQ  # Always use default (433.92M)
                 }
                 
-                # 2. Smart Logic: Radio 1 = 433, Radio 2 = 915, Others = Default
-                if i == 0:
-                    radio_setup["freq"] = config.RTL_DEFAULT_FREQ # Default 433.92M
-                    print(f"[STARTUP] Radio #{i+1} ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
-                elif i == 1:
-                    radio_setup["freq"] = "915M"
-                    radio_setup["rate"] = "1000k"
-                    print(f"[STARTUP] Radio #{i+1} ({dev['name']}) -> Auto-Setting to 915M (1000k)")
-                else:
-                    # Fallback for Radio 3+
-                    radio_setup["freq"] = config.RTL_DEFAULT_FREQ
-                    print(f"[STARTUP] Radio #{i+1} ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
-                    print(f"[STARTUP] Hint: If this device is for 315M or 868M, please configure it manually in options.")
+                print(f"[STARTUP] Radio #{i+1} ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
 
-                # 3. Merge Device Info and Launch
+                # 2. Merge Device Info and Launch
                 radio_setup.update(dev)
 
                 threading.Thread(
