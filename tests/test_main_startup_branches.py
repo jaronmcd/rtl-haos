@@ -4,6 +4,7 @@ def test_main_manual_config_duplicate_ids_and_unconfigured_hardware(mocker, caps
 
     mocker.patch.object(main, "get_version", return_value="vtest")
     mocker.patch.object(main, "show_logo", lambda *_: None)
+    mocker.patch.object(main, "check_dependencies", lambda: None)
 
     class DummyMQTT:
         def __init__(self, version=None):
