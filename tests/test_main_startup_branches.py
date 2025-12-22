@@ -79,6 +79,7 @@ def test_main_auto_mode_warns_when_ignoring_extra_radios(mocker, capsys):
 
     mocker.patch.object(main, "get_version", return_value="vtest")
     mocker.patch.object(main, "show_logo", lambda *_: None)
+    mocker.patch.object(main, "check_dependencies", lambda: None)
 
     class DummyMQTT:
         def __init__(self, version=None): self.version = version
