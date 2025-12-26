@@ -1,4 +1,8 @@
 # Changelog
+## v1.1.11
+- **CHANGE:** Simplified Battery Low handling: entity is always published and no longer appears/disappears based on battery state.
+- **REMOVED:** `battery_publish_only_when_low`, `battery_hide_when_ok`, and `battery_hide_after` options (use Home Assistant’s entity disable/hide instead).
+- **FIX:** Increased Battery Low discovery `expire_after` (min 24h) to prevent frequent “unavailable” for devices that report `battery_ok` infrequently.
 ## v1.1.10
 - **NEW:** Battery Low (battery_ok) improvements: optional low-latching, publish-only-when-low, and auto-hide after stable OK.
 - **NEW:** Added basic CI (pytest + ruff) and pre-commit hooks for consistent formatting/linting.
