@@ -70,6 +70,7 @@ FIELD_META = {
     "strikes":              ("count", "none", "mdi:flash", "Lightning Strikes"),
     "strike_distance":      ("km", "distance", "mdi:flash-alert", "Storm Distance"),
     "storm_dist":           ("km", "distance", "mdi:flash-alert", "Storm Distance"),
+    "strike_count":         (None, "none", "mdi:lightning-bolt", "Strike Count"),
 
     # --- Soil Moisture ---
     "moisture":            ("%", "moisture", "mdi:water-percent", "Soil Moisture"),
