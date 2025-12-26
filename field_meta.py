@@ -87,7 +87,7 @@ FIELD_META = {
     "id":                   ("", "none", "mdi:identifier", "Device ID"),
     "channel":              ("", "none", "mdi:radio-tower", "Channel"),
     "mic":                  ("", "none", "mdi:check-network", "Integrity Check"),
-    "radio_status":         ("", "none", "mdi:usb-port", "Radio Status"),
+    "radio_status":         ("", "none", "mdi:radio-tower", "Radio Status"),
 
     # --- Utility Meters ---
     "Consumption":          ("ft³", "gas", "mdi:fire", "Gas Usage"),
