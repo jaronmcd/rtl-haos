@@ -24,7 +24,7 @@ FIELD_META = {
     "sys_temp":             ("°C", "temperature", "mdi:thermometer-lines", "CPU Temp"),
     "sys_uptime":           ("s", "duration", "mdi:clock-start", "System Uptime"),
     "model":                ("", "none", "mdi:tag", "Model"),
-    
+
     # --- Magnetometer ---
     "mag_uT":               ("uT", "none", "mdi:magnet", "Mag Field Strength"),
     "geomag_index":         ("idx", "none", "mdi:waveform", "Mag Disturbance"),
@@ -90,7 +90,8 @@ FIELD_META = {
     "channel":              ("", "none", "mdi:radio-tower", "Channel"),
     "mic":                  ("", "none", "mdi:check-network", "Integrity Check"),
     "radio_status":         ("", "none", "mdi:radio-tower", "Radio Status"),
-
+    "rfi":                  (None, "none", "mdi:radio-tower", "RFI"),
+    
     # --- Utility Meters ---
     "Consumption":          ("ft³", "gas", "mdi:fire", "Gas Usage"),
     "consumption":          ("ft³", "gas", "mdi:fire", "Gas Usage"),
