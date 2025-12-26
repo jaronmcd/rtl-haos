@@ -36,6 +36,31 @@ configuration:
       If disabled (default), only a summary line ("Flushed X readings...") is printed
       every throttle interval.
 
+  battery_ok_clear_after:
+    name: Battery Clear Delay
+    description: >-
+      Seconds the battery must remain OK before clearing a LOW alert.
+      Set to 0 to clear immediately.
+
+  battery_publish_only_when_low:
+    name: Battery Entity Only When Low
+    description: >-
+      If enabled, the Battery Low entity will not be created/published unless a LOW is observed.
+      This keeps your entity list clean and only shows an alert when needed.
+
+  battery_hide_when_ok:
+    name: Auto-hide Battery Entity
+    description: >-
+      If enabled, RTL-HAOS will delete the Battery Low entity after it has been OK for a while.
+      It will automatically reappear the next time the battery is LOW.
+
+  battery_hide_after:
+    name: Battery Hide After
+    description: >-
+      Seconds the battery must remain OK (after clearing) before deleting the entity.
+      Set to 0 to disable auto-hide.
+
+
   rtl_config:
     name: Radio Configuration
     description: >-

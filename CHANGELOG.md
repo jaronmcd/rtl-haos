@@ -1,4 +1,9 @@
 # Changelog
+## v1.1.10
+- **NEW:** Battery Low (battery_ok) improvements: optional low-latching, publish-only-when-low, and auto-hide after stable OK.
+- **NEW:** Added basic CI (pytest + ruff) and pre-commit hooks for consistent formatting/linting.
+- **FIX:** Unified version strings across add-on and Python package.
+
 ## v1.1.9  
 - **FIX:** Added -M level back to rtl_433 cmd for radio signal metrics
 ## v1.1.8

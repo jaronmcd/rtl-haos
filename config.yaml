@@ -1,6 +1,6 @@
 name: "RTL-HAOS"
 description: "RTL-SDR to Home Assistant MQTT bridge with signal diagnostics and system monitoring"
-version: "1.1.9x1"
+version: "1.1.10"
 slug: rtl-haos
 url: "https://github.com/jaronmcd/rtl-haos"
 arch:
@@ -23,11 +23,22 @@ options:
   rtl_throttle_interval: 30
   debug_raw_json: false
   rtl_show_timestamps: false
-  verbose_transmissions: false  # <--- ADDED DEFAULT VALUE
+  verbose_transmissions: false  # Log every single MQTT publish
+
+  # --- Battery alert behavior (battery_ok -> Battery Low) ---
+  # 0 disables latching and clears low on the next OK
+  battery_ok_clear_after: 300
+  # Only create/publish the entity when LOW is observed
+  battery_publish_only_when_low: false
+  # If enabled, delete the entity after it has been OK for a while
+  battery_hide_when_ok: false
+  # Seconds battery must remain OK before deleting discovery config (0 disables)
+  battery_hide_after: 0
   
-  # --- DELETED GLOBAL DEFAULTS ---
-  # rtl_default_freq, rtl_default_hop_interval, rtl_default_rate are gone.
-  # Users must now use rtl_config below to change these.
+  # --- DEFAULTS (Add-on UI) ---
+  # Global defaults are NOT exposed in the add-on UI.
+  # In add-on mode, use rtl_config below to set freq/rate/hop per-radio.
+  # Standalone users may still override defaults via .env (RTL_DEFAULT_FREQ, etc.).
   
   # --- Advanced Radio Configuration ---
   rtl_config: []
@@ -53,7 +64,12 @@ schema:
   rtl_throttle_interval: int
   debug_raw_json: bool
   rtl_show_timestamps: bool
-  verbose_transmissions: bool   # <--- ADDED DATA TYPE
+  verbose_transmissions: bool
+
+  battery_ok_clear_after: int
+  battery_publish_only_when_low: bool
+  battery_hide_when_ok: bool
+  battery_hide_after: int
 
   # --- DELETED GLOBAL SCHEMA ---
   # The UI will no longer show the 3 text boxes for defaults.

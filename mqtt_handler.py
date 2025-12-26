@@ -98,6 +98,10 @@ class HomeNodeMQTT:
 
         # Track one-time migrations (e.g., entity type/domain changes)
         self.migration_cleared = set()
+
+        # Battery alert state (battery_ok -> Battery Low)
+        # Keyed by clean_id (device base unique id).
+        self._battery_state: dict[str, dict] = {}
         
         self.discovery_lock = threading.Lock()
 
@@ -284,7 +288,7 @@ class HomeNodeMQTT:
 
         with self.discovery_lock:
             if unique_id in self.discovery_published:
-                return
+                return False
 
             default_meta = (None, "none", "mdi:eye", sensor_name.replace("_", " ").title())
             
@@ -362,12 +366,15 @@ class HomeNodeMQTT:
             config_topic = f"homeassistant/{domain}/{unique_id}/config"
             self.client.publish(config_topic, json.dumps(payload), retain=True)
             self.discovery_published.add(unique_id)
+            return True
 
     def send_sensor(self, sensor_id, field, value, device_name, device_model, is_rtl=True, friendly_name=None):
         if value is None:
             return
 
         self.tracked_devices.add(device_name)
+
+        hide_after_publish = False
         clean_id = clean_mac(sensor_id) 
         unique_id_base = clean_id
         state_topic_base = clean_id
@@ -380,6 +387,7 @@ class HomeNodeMQTT:
         extra_payload = None
         out_value = value
 
+
         # battery_ok: 1/True => battery OK, 0/False => battery LOW
         # Home Assistant's binary_sensor device_class "battery" expects:
         #   ON  => low
@@ -389,7 +397,43 @@ class HomeNodeMQTT:
             if ok is None:
                 return
 
-            low = not ok
+            now = time.time()
+            st = self._battery_state.setdefault(
+                clean_id,
+                {
+                    "latched_low": False,
+                    "last_low": None,
+                    "ok_candidate_since": None,
+                    "ok_since": None,
+                },
+            )
+
+            # Update latch
+            if not ok:
+                st["latched_low"] = True
+                st["last_low"] = now
+                st["ok_candidate_since"] = None
+                st["ok_since"] = None
+                low = True
+            else:
+                if st.get("latched_low"):
+                    if st.get("ok_candidate_since") is None:
+                        st["ok_candidate_since"] = now
+
+                    clear_after = int(getattr(config, "BATTERY_OK_CLEAR_AFTER", 0) or 0)
+                    if clear_after <= 0 or (now - st["ok_candidate_since"]) >= clear_after:
+                        st["latched_low"] = False
+                        st["ok_candidate_since"] = None
+                        st["ok_since"] = now
+                        low = False
+                    else:
+                        low = True
+                else:
+                    # Already OK and not latched
+                    if st.get("ok_since") is None:
+                        st["ok_since"] = now
+                    low = False
+
             domain = "binary_sensor"
             out_value = "ON" if low else "OFF"
             extra_payload = {"payload_on": "ON", "payload_off": "OFF"}
@@ -407,7 +451,26 @@ class HomeNodeMQTT:
             if friendly_name is None:
                 friendly_name = "Battery Low"
 
-        self._publish_discovery(
+            # --- Optional: publish only when low ---
+            with self.discovery_lock:
+                discovered = unique_id_v2 in self.discovery_published
+
+            if getattr(config, "BATTERY_PUBLISH_ONLY_WHEN_LOW", False) and not low and not discovered:
+                # Track latch state but don't create a noisy entity.
+                return
+
+            # --- Optional: hide (delete discovery config) once the battery has been OK for long enough ---
+            hide_when_ok = bool(getattr(config, "BATTERY_HIDE_WHEN_OK", False))
+            hide_after = int(getattr(config, "BATTERY_HIDE_AFTER", 0) or 0)
+
+            if hide_when_ok and hide_after > 0 and not low and st.get("ok_since") is not None:
+                if (now - st["ok_since"]) >= hide_after:
+                    if not discovered:
+                        # Keep it hidden; don't recreate it.
+                        return
+                    hide_after_publish = True
+
+        discovery_published_now = self._publish_discovery(
             field,
             state_topic,
             unique_id,
@@ -419,11 +482,20 @@ class HomeNodeMQTT:
         )
 
         unique_id_v2 = f"{unique_id}{config.ID_SUFFIX}"
-        value_changed = self.last_sent_values.get(unique_id_v2) != out_value
+        value_changed = (self.last_sent_values.get(unique_id_v2) != out_value) or bool(discovery_published_now)
 
         if value_changed or is_rtl:
             self.client.publish(state_topic, str(out_value), retain=True)
             self.last_sent_values[unique_id_v2] = out_value
+
+            if hide_after_publish:
+                # Delete discovery config to remove the entity from HA.
+                # This is retained and will remove the entity until we recreate it on the next LOW.
+                config_topic = f"homeassistant/{domain}/{unique_id_v2}/config"
+                self.client.publish(config_topic, "", retain=True)
+                with self.discovery_lock:
+                    self.discovery_published.discard(unique_id_v2)
+                self.last_sent_values.pop(unique_id_v2, None)
             if value_changed:
                 # --- NEW: Check Verbosity Setting ---
                 if config.VERBOSE_TRANSMISSIONS:

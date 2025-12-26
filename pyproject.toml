@@ -1,6 +1,6 @@
 [project]
 name = "rtl-haos"
-version = "1.0.0"
+version = "1.1.10"
 description = "RTL-SDR to Home Assistant MQTT bridge"
 readme = "README.md"
 requires-python = ">=3.9"
@@ -15,4 +15,33 @@ dependencies = [
 dev = [
     "pytest>=9.0.0",
     "pytest-mock>=3.12.0",
+]
+
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+# Start strict-ish, but ignore a few noisy rules so existing code passes.
+select = ["E9", "F"]
+ignore = [
+  "E501",  # line length (handled by formatter / practical for logs)
+  "F401",  # unused imports (often used during refactors)
+  "F841",  # assigned but unused (tests/helpers)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = [
+  "config",
+  "mqtt_handler",
+  "data_processor",
+  "rtl_manager",
+  "system_monitor",
+  "utils",
+  "field_meta",
 ]

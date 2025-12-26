@@ -224,17 +224,16 @@ Go to the **Configuration** tab and set your options:
 
 ```yaml
 # MQTT Settings
-mqtt_host: ""  # Leave blank to auto-use the Home Assistant MQTT service (or set to "core-mosquitto"/broker IP)
+mqtt_host: ""          # Leave blank to auto-use the Home Assistant MQTT service (or set to core-mosquitto / broker IP)
 mqtt_user: your_mqtt_user
 mqtt_pass: your_mqtt_password
 
-bridge_name: "rtl-haos-bridge"        # unique ID for system metrics device
-
-rtl_default_freq: "433.92M"           # or "433.92M, 315M, 915M"
-rtl_default_hop_interval: 60          # only used when multiple freqs set
+# Bridge identity (keeps your HA device stable)
+bridge_id: "42"
+bridge_name: "rtl-haos-bridge"
 ```
 
-> **Note:** The add-on will automatically use the Home Assistant MQTT service if available and `mqtt_host` is left blank.
+> **Note:** If `mqtt_host` is left blank, the add-on will try to use Home Assistant's Mosquitto service.
 
 **Advanced Configuration (Optional, default values shown below):**
 
@@ -243,6 +242,16 @@ rtl_default_hop_interval: 60          # only used when multiple freqs set
 rtl_expire_after: 600 # Seconds before sensor marked unavailable
 rtl_throttle_interval: 30 # Seconds to buffer/average data (0 = realtime)
 debug_raw_json: false # Print raw rtl_433 JSON for debugging
+
+# Battery alert behavior (battery_ok -> Battery Low binary_sensor)
+# 0 clears immediately on next OK
+battery_ok_clear_after: 300
+# If true, Battery Low entity is only created/published when LOW is observed
+battery_publish_only_when_low: false
+# If true, delete the entity after stable OK (it will reappear next time LOW)
+battery_hide_when_ok: false
+# Seconds battery must remain OK before deleting entity (0 disables)
+battery_hide_after: 0
 
 # Multi-Radio Configuration (leave empty for auto-detection)
 rtl_config:

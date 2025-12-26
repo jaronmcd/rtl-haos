@@ -114,7 +114,9 @@ def get_version():
             with open(cfg_path, "r") as f:
                 for line in f:
                     if line.strip().startswith("version:"):
-                        return f"v{line.split(':', 1)[1].strip().replace('\"', '').replace('\'', '')}"
+                        ver = line.split(':', 1)[1].strip()
+                        ver = ver.strip().strip('\"').strip("'")
+                        return f"v{ver}"
     except Exception:
         pass
     return "Unknown"
