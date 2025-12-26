@@ -35,6 +35,8 @@ _original_print = builtins.print
 
 def get_source_color(clean_text):
     clean = clean_text.lower()
+    if "unsupported" in clean: return c_yellow
+    if "supported" in clean: return c_green
     if "mqtt" in clean: return c_magenta
     if "rtl" in clean: return c_magenta
     if "startup" in clean: return c_magenta
