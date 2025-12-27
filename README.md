@@ -34,10 +34,11 @@ See rtl_433 documentation for supported devices: https://github.com/merbanan/rtl
 
 ## 📚 Documentation
 
-- **Configuration**: `docs/CONFIG.md`
-- **MQTT topics & discovery**: `docs/MQTT.md`
-- **Multi-radio setup**: `docs/MULTI_RADIO.md`
-- **Development & testing**: `docs/DEVELOPMENT.md`
+- **Configuration**: [docs/CONFIG.md](docs/CONFIG.md)
+- **MQTT topics & discovery**: [docs/MQTT.md](docs/MQTT.md)
+- **Multi-radio setup**: [docs/MULTI_RADIO.md](docs/MULTI_RADIO.md)
+- **Development & testing**: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
+
 
 ## 🧩 How It Works
 
