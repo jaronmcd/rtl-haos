@@ -78,6 +78,45 @@ class Settings(BaseSettings):
     rtl_default_hop_interval: int = Field(default=60)
     rtl_default_rate: str = Field(default="250k")
 
+    # --- Auto multi-radio defaults (used when rtl_config is empty) ---
+    # If True and >=2 dongles are detected, start 2 radios automatically.
+    rtl_auto_multi: bool = Field(default=True)
+
+    # How many radios to start in auto mode.
+    # - 0 means "use detected count" (bounded by rtl_auto_hard_cap).
+    # - >0 starts exactly that many (bounded by available dongles).
+    rtl_auto_max_radios: int = Field(default=0)
+
+    # Hard safety cap when rtl_auto_max_radios=0 (use detected count). Set higher if you really want more.
+    rtl_auto_hard_cap: int = Field(default=3)
+
+    # Secondary band plan (used for Radio #2 in auto multi-mode):
+    #  - auto   : infer from HA country (if available), else hop 868/915
+    #  - us     : 915M
+    #  - eu     : 868M
+    #  - world  : hop 868M,915M
+    #  - custom : use rtl_auto_secondary_freq
+    rtl_auto_band_plan: str = Field(default="auto")
+
+    # Used only when rtl_auto_band_plan=custom. Example: "920M" or "868M,915M".
+    # If left blank, we fall back to the 'auto' behavior.
+    rtl_auto_secondary_freq: str = Field(default="")
+
+    # Auto primary/secondary rates (freqs are chosen elsewhere)
+    rtl_auto_primary_rate: str = Field(default="250k")
+    rtl_auto_secondary_rate: str = Field(default="1024k")
+
+    # Optional 3rd radio (if present) acts as a regional "hopper" to catch interesting devices
+    # outside the primary/secondary bands.
+    #
+    # - If rtl_auto_hopper_freqs is empty, the hopper plan is derived from HA country:
+    #     * EU/UK/EEA/CH: 915M,315M,345M
+    #     * Else (US/CA/AU/NZ/etc): 315M,345M,868M
+    # - If rtl_auto_hopper_freqs is set, it is used verbatim (comma-separated).
+    rtl_auto_hopper_freqs: str = Field(default="")
+    rtl_auto_hopper_hop_interval: int = Field(default=20)
+    rtl_auto_hopper_rate: str = Field(default="1024k")
+
     # --- Bridge identity ---
     bridge_id: str = Field(default="42")
     bridge_name: str = Field(default="rtl-haos-bridge")
@@ -131,6 +170,7 @@ class Settings(BaseSettings):
             "storm_dist",
             "Consumption",
             "consumption",
+            "consumption_data",
             "meter_reading",
             "moisture",
         ]
@@ -174,6 +214,18 @@ RTL_CONFIG = settings.rtl_config
 RTL_DEFAULT_FREQ = settings.rtl_default_freq
 RTL_DEFAULT_HOP_INTERVAL = settings.rtl_default_hop_interval
 RTL_DEFAULT_RATE = settings.rtl_default_rate
+
+# Auto multi-radio
+RTL_AUTO_MULTI = settings.rtl_auto_multi
+RTL_AUTO_MAX_RADIOS = settings.rtl_auto_max_radios
+RTL_AUTO_HARD_CAP = settings.rtl_auto_hard_cap
+RTL_AUTO_BAND_PLAN = settings.rtl_auto_band_plan
+RTL_AUTO_SECONDARY_FREQ = settings.rtl_auto_secondary_freq
+RTL_AUTO_PRIMARY_RATE = settings.rtl_auto_primary_rate
+RTL_AUTO_SECONDARY_RATE = settings.rtl_auto_secondary_rate
+RTL_AUTO_HOPPER_FREQS = settings.rtl_auto_hopper_freqs
+RTL_AUTO_HOPPER_HOP_INTERVAL = settings.rtl_auto_hopper_hop_interval
+RTL_AUTO_HOPPER_RATE = settings.rtl_auto_hopper_rate
 
 SKIP_KEYS = settings.skip_keys
 DEVICE_BLACKLIST = settings.device_blacklist

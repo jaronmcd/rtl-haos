@@ -123,7 +123,13 @@ def check_dependencies():
 
 import config
 from mqtt_handler import HomeNodeMQTT
-from utils import get_system_mac, validate_radio_config
+from utils import (
+    get_system_mac,
+    validate_radio_config,
+    get_homeassistant_country_code,
+    choose_secondary_band_defaults,
+    choose_hopper_band_defaults,
+)
 from system_monitor import system_stats_loop
 from data_processor import DataProcessor
 from rtl_manager import rtl_loop, discover_rtl_devices
@@ -248,41 +254,270 @@ def main():
         # --- B. SMART AUTO-CONFIGURATION MODE ---
         if detected_devices:
             print(f"[STARTUP] Auto-detected {len(detected_devices)} radios.")
-            print("[STARTUP] Unconfigured Mode: Starting PRIMARY radio only.")
+
+            # Auto Multi-Radio: if a 2nd dongle is present, start a second rtl_433 instance automatically.
+            if getattr(config, "RTL_AUTO_MULTI", False) and len(detected_devices) > 1:
+                max_radios_cfg = getattr(config, "RTL_AUTO_MAX_RADIOS", 0)
+                try:
+                    max_radios_cfg = int(max_radios_cfg)
+                except Exception:
+                    max_radios_cfg = 0
+
+                # rtl_auto_max_radios:
+                #   0 -> use detected count (bounded by RTL_AUTO_HARD_CAP)
+                #  >0 -> start that many (bounded by available dongles)
+                if max_radios_cfg <= 0:
+                    hard_cap = getattr(config, "RTL_AUTO_HARD_CAP", 3)
+                    try:
+                        hard_cap = int(hard_cap)
+                    except Exception:
+                        hard_cap = 3
+                    if hard_cap < 1:
+                        hard_cap = 1
+                    max_radios = min(len(detected_devices), hard_cap)
+                else:
+                    max_radios = min(max_radios_cfg, len(detected_devices))
+
+                if max_radios_cfg <= 0:
+                    try:
+                        hard_cap_disp = int(getattr(config, "RTL_AUTO_HARD_CAP", 3) or 3)
+                    except Exception:
+                        hard_cap_disp = 3
+                    print(
+                        f"[STARTUP]: Auto Multi-Radio: rtl_auto_max_radios=0 -> starting {max_radios} radio(s) (cap={hard_cap_disp})."
+                    )
+                else:
+                    print(
+                        f"[STARTUP]: Auto Multi-Radio: rtl_auto_max_radios={max_radios_cfg} -> starting {max_radios} radio(s)."
+                    )
 
 
-            dev = detected_devices[0]
-            dev_name = dev.get("name", "Primary")
+                country = get_homeassistant_country_code()
+                plan = getattr(config, "RTL_AUTO_BAND_PLAN", "auto")
+                sec_override = str(getattr(config, "RTL_AUTO_SECONDARY_FREQ", "") or "").strip()
+                sec_freq, sec_hop = choose_secondary_band_defaults(
+                    plan=plan,
+                    country_code=country,
+                    secondary_override=sec_override,
+                )
 
-            # 1. SMART DEFAULT LOGIC
-            def_freqs = config.RTL_DEFAULT_FREQ.split(",")
-            def_hop = config.RTL_DEFAULT_HOP_INTERVAL
-            if len(def_freqs) < 2: def_hop = 0
+                # PRIMARY uses RTL_DEFAULT_FREQ; SECONDARY uses region-aware defaults.
+                print("[STARTUP] Unconfigured Mode: Auto Multi-Radio enabled.")
+                if country:
+                    print(f"[STARTUP] Auto Multi-Radio: HA country={country}, band_plan={plan} -> secondary={sec_freq}")
+                else:
+                    print(f"[STARTUP] Auto Multi-Radio: HA country=unknown, band_plan={plan} -> secondary={sec_freq}")
 
-            radio_setup = {
-                "slot": 0,
-                "hop_interval": def_hop,
-                "rate": config.RTL_DEFAULT_RATE,
-                "freq": config.RTL_DEFAULT_FREQ
-            }
-            
-            radio_setup.update(dev)
+                radios = []
 
-            warns = validate_radio_config(radio_setup)
-            for w in warns:
-                print(f"[STARTUP] DEFAULT CONFIG WARNING: [Radio: {dev_name}] {w}")
-            
-            print(f"[STARTUP] Radio #1 ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
-            
-            if len(detected_devices) > 1:
-                print(f"[STARTUP] WARNING: [System] {len(detected_devices)-1} other device(s) ignored in auto-mode. Configure them in options.json to use.")
+                # --- Radio #1 (Primary) ---
+                dev1 = detected_devices[0]
+                name1 = dev1.get("name", "Primary")
 
-            threading.Thread(
-                target=rtl_loop,
-                args=(radio_setup, mqtt_handler, processor, sys_id, sys_model),
-                daemon=True,
-            ).start()
-            
+                def_freqs = str(config.RTL_DEFAULT_FREQ).split(",")
+                def_hop = int(getattr(config, "RTL_DEFAULT_HOP_INTERVAL", 0) or 0)
+                if len(def_freqs) < 2:
+                    def_hop = 0
+                elif def_hop <= 0:
+                    def_hop = 60
+
+                radio1 = {
+                    "slot": 0,
+                    "hop_interval": def_hop,
+                    "rate": getattr(config, "RTL_AUTO_PRIMARY_RATE", config.RTL_DEFAULT_RATE),
+                    "freq": config.RTL_DEFAULT_FREQ,
+                }
+                radio1.update(dev1)
+                radio1["name"] = f"{name1} (Auto 1)"
+                radios.append(radio1)
+
+                # --- Radio #2 (Secondary) ---
+                if max_radios >= 2:
+                    dev2 = detected_devices[1]
+                    name2 = dev2.get("name", "Secondary")
+
+                    sec_list = [s.strip() for s in str(sec_freq).split(",") if s.strip()]
+
+                    # If we have 3+ radios available and the plan contains multiple freqs,
+                    # split them across Radio #2 and #3 to avoid hopping.
+                    freq2 = sec_freq
+                    hop2 = 0
+                    freq3 = None
+
+                    if max_radios >= 3 and len(detected_devices) >= 3 and len(sec_list) >= 2:
+                        freq2 = sec_list[0]
+                        freq3 = sec_list[1]
+                        hop2 = 0
+                    else:
+                        if len(sec_list) >= 2:
+                            hop2 = int(sec_hop or 0)
+                            if hop2 <= 0:
+                                hop2 = 15
+
+                    radio2 = {
+                        "slot": 1,
+                        "hop_interval": hop2,
+                        "rate": getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k"),
+                        "freq": freq2,
+                    }
+                    radio2.update(dev2)
+                    radio2["name"] = f"{name2} (Auto 2)"
+                    radios.append(radio2)
+
+                    # --- Radio #3 (Tertiary) ---
+                    if max_radios >= 3 and len(detected_devices) >= 3:
+                        dev3 = detected_devices[2]
+                        name3 = dev3.get("name", "Tertiary")
+
+                        # If Radio #3 wasn't already assigned by splitting a multi-freq secondary plan,
+                        # use it as a regional "hopper" (when we know the region). This is intentionally
+                        # opportunistic and may miss bursts while tuned elsewhere.
+                        if not freq3:
+                            hopper_override = str(getattr(config, "RTL_AUTO_HOPPER_FREQS", "") or "").strip()
+                            hopper_hop = int(getattr(config, "RTL_AUTO_HOPPER_HOP_INTERVAL", 20) or 20)
+                            hopper_rate = getattr(config, "RTL_AUTO_HOPPER_RATE", getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k"))
+
+                            # Only auto-derive hopper freqs if we actually know the country.
+                            if hopper_override:
+                                hopper_freq = hopper_override
+                            elif country:
+                                # Derive a regional hopper plan that does NOT overlap with the
+                                # primary/secondary radios.
+                                used = {
+                                    s.strip().lower()
+                                    for s in str(radio1.get("freq", "")).split(",")
+                                    if s.strip()
+                                }
+                                used.update({s.strip().lower() for s in str(freq2).split(",") if s.strip()})
+                                hopper_freq = choose_hopper_band_defaults(country_code=country, used_freqs=used)
+                            else:
+                                hopper_freq = None
+
+                            # If we don't have a hopper plan (unknown country and no override),
+                            # fall back to the "other" band to maximize coverage.
+                            if not hopper_freq:
+                                f2 = str(freq2).strip().lower()
+                                if f2.startswith("868"):
+                                    hopper_freq = "915M"
+                                elif f2.startswith("915"):
+                                    hopper_freq = "868M"
+                                else:
+                                    hopper_freq = "915M"
+                                hopper_hop = 0
+                                hopper_rate = getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k")
+
+                            # If only one frequency remains, disable hopping.
+                            hopper_list = [s.strip() for s in str(hopper_freq).split(",") if s.strip()]
+
+                            # Avoid hopping onto a band we already cover with Radio #1/#2.
+                            used_freqs = {
+                                s.strip().lower() for s in str(radio1.get("freq", "")).split(",") if s.strip()
+                            }
+                            used_freqs.update(
+                                {s.strip().lower() for s in str(freq2).split(",") if s.strip()}
+                            )
+                            filtered = [f for f in hopper_list if f.strip().lower() not in used_freqs]
+                            hopper_list = filtered
+
+                            # If nothing remains after filtering, we refuse to overlap.
+                            if not hopper_list:
+                                print(
+                                    "[STARTUP] Auto Multi-Radio: Radio #3 hopper has no non-overlapping bands remaining; skipping Radio #3. "
+                                    "(Override rtl_auto_hopper_freqs or adjust band plan.)"
+                                )
+                                freq3 = None
+                                hop3 = 0
+                                rate3 = hopper_rate
+                                # Skip creating Radio #3 entirely.
+                                dev3 = None
+
+                            if len(hopper_list) < 2:
+                                hopper_hop = 0
+                            else:
+                                # Don't hop too aggressively; make the cycle predictable.
+                                if hopper_hop < 5:
+                                    hopper_hop = 5
+
+                            freq3 = ",".join(hopper_list)
+                            hop3 = hopper_hop
+                            rate3 = hopper_rate
+                        else:
+                            hop3 = 0
+                            rate3 = getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k")
+
+                        if not dev3 or not freq3:
+                            # Nothing to start for Radio #3.
+                            pass
+                        else:
+                            radio3 = {
+                                "slot": 2,
+                                "hop_interval": hop3,
+                                "rate": rate3,
+                                "freq": freq3,
+                            }
+                            radio3.update(dev3)
+                            radio3["name"] = f"{name3} (Auto 3)"
+                            radios.append(radio3)
+
+                for r in radios:
+                    dev_name = r.get("name", "Auto")
+                    warns = validate_radio_config(r)
+                    for w in warns:
+                        print(f"[STARTUP] DEFAULT CONFIG WARNING: [Radio: {dev_name}] {w}")
+
+                    print(
+                        f"[STARTUP] Radio #{int(r.get('slot', 0)) + 1} ({r.get('name')}) -> {r.get('freq')} (Rate: {r.get('rate')})"
+                    )
+
+                    threading.Thread(
+                        target=rtl_loop,
+                        args=(r, mqtt_handler, processor, sys_id, sys_model),
+                        daemon=True,
+                    ).start()
+                    time.sleep(5)
+
+                if len(detected_devices) > len(radios):
+                    print(
+                        f"[STARTUP] WARNING: [System] {len(detected_devices) - len(radios)} additional RTL-SDR(s) detected but not started in auto multi-mode. "
+                        "Use rtl_config to configure them."
+                    )
+
+            else:
+                print("[STARTUP] Unconfigured Mode: Starting PRIMARY radio only.")
+
+                dev = detected_devices[0]
+                dev_name = dev.get("name", "Primary")
+
+                # 1. SMART DEFAULT LOGIC
+                def_freqs = config.RTL_DEFAULT_FREQ.split(",")
+                def_hop = config.RTL_DEFAULT_HOP_INTERVAL
+                if len(def_freqs) < 2:
+                    def_hop = 0
+
+                radio_setup = {
+                    "slot": 0,
+                    "hop_interval": def_hop,
+                    "rate": config.RTL_DEFAULT_RATE,
+                    "freq": config.RTL_DEFAULT_FREQ
+                }
+
+                radio_setup.update(dev)
+
+                warns = validate_radio_config(radio_setup)
+                for w in warns:
+                    print(f"[STARTUP] DEFAULT CONFIG WARNING: [Radio: {dev_name}] {w}")
+
+                print(f"[STARTUP] Radio #1 ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
+
+                if len(detected_devices) > 1:
+                    print(f"[STARTUP] WARNING: [System] {len(detected_devices)-1} additional SDR(s) detected but ignored. Enable Auto Multi-Radio or configure rtl_config to use them.")
+
+                threading.Thread(
+                    target=rtl_loop,
+                    args=(radio_setup, mqtt_handler, processor, sys_id, sys_model),
+                    daemon=True,
+                ).start()
+           
         else:
             # --- UPDATED: Warning for Fallback Mode ---
             print("[STARTUP] WARNING: [System] No hardware detected and no configuration provided. Attempting to start default device '0' (this will likely fail).")

@@ -11,6 +11,8 @@ DESCRIPTION:
 import re
 import math
 import socket
+import os
+import json
 import config
 
 # Global cache
@@ -114,3 +116,124 @@ def validate_radio_config(radio_conf):
         )
 
     return warnings
+
+
+def get_homeassistant_country_code() -> str | None:
+    """Best-effort: infer Home Assistant country code (e.g. 'US', 'DE').
+
+    - Add-on: reads /config/.storage/core.config
+    - Standalone: optionally uses env var HOMEASSISTANT_COUNTRY / HA_COUNTRY
+    Returns None if unknown.
+    """
+    # 1) Env override (works in any mode)
+    for k in ("HOMEASSISTANT_COUNTRY", "HA_COUNTRY", "COUNTRY"):
+        v = os.getenv(k)
+        if v and str(v).strip():
+            return str(v).strip().upper()
+
+    # 2) Home Assistant storage (add-on)
+    core_cfg = "/config/.storage/core.config"
+    try:
+        with open(core_cfg, "r", encoding="utf-8") as f:
+            obj = json.load(f)
+        # Typical structure: {"data": {"country": "US", ...}, ...}
+        data = obj.get("data") if isinstance(obj, dict) else None
+        if isinstance(data, dict):
+            c = data.get("country")
+            if c and str(c).strip():
+                return str(c).strip().upper()
+    except Exception:
+        pass
+
+    return None
+
+
+_EU_868_COUNTRIES = {
+    # EU + EEA + UK + CH (broadly 868 MHz ISM users)
+    "AT","BE","BG","HR","CY","CZ","DK","EE","FI","FR","DE","GR","HU","IE","IT",
+    "LV","LT","LU","MT","NL","PL","PT","RO","SK","SI","ES","SE",
+    "IS","LI","NO","CH","GB",
+}
+
+
+def choose_secondary_band_defaults(
+    plan: str = "auto",
+    country_code: str | None = None,
+    secondary_override: str | None = None,
+) -> tuple[str, int]:
+    """Return (freq_str, hop_interval) for the secondary radio in auto multi-mode.
+
+    plan:
+      - 'auto' : infer using country_code; if unknown, hop 868+915
+      - 'eu'   : 868M
+      - 'us'   : 915M
+      - 'world': hop 868M,915M
+      - 'custom': use secondary_override (if provided), otherwise behave like 'auto'
+      - otherwise: treated as custom freq string (e.g. '920M' or '868M,915M')
+    """
+    p = (plan or "auto").strip().lower()
+
+    if p in ("custom",):
+        ov = (secondary_override or "").strip()
+        if ov:
+            hop = 15 if "," in ov else 0
+            return (ov, hop)
+        # No override provided; fall back to auto behavior.
+        p = "auto"
+
+    if p in ("auto", "detect", "country"):
+        cc = (country_code or "").strip().upper()
+        if cc in _EU_868_COUNTRIES:
+            return ("868M", 0)
+        if cc:
+            # Default non-EU to 915M. Users can override with plan/custom freq.
+            return ("915M", 0)
+        # Unknown country: be internationally tolerant by hopping both.
+        return ("868M,915M", 15)
+
+    if p in ("eu", "europe", "uk"):
+        return ("868M", 0)
+
+    if p in ("us", "usa", "na", "north_america", "north-america", "canada", "au", "australia", "nz", "new_zealand"):
+        return ("915M", 0)
+
+    if p in ("world", "global", "intl", "international"):
+        return ("868M,915M", 15)
+
+    # Treat anything else as a custom freq string.
+    # If multiple freqs are provided, hop interval is enabled.
+    freq_str = plan.strip()
+    hop = 15 if "," in freq_str else 0
+    return (freq_str, hop)
+
+
+def choose_hopper_band_defaults(
+    country_code: str | None = None,
+    used_freqs: set[str] | None = None,
+) -> str:
+    """Return a comma-separated frequency string for the optional 3rd "hopper" radio.
+
+    Goal:
+      - Do NOT overlap with the primary/secondary radios (pass used_freqs to enforce this).
+      - Be "interesting" (scan bands where people commonly have *other* stuff).
+
+    Notes:
+      - This is intentionally opportunistic and may miss bursts while tuned elsewhere.
+      - The hopper is best-effort: if all candidates overlap with used_freqs, returns "".
+
+    Candidate bands (ordered by "interesting" likelihood):
+      - US/CA/AU/NZ/etc (typically already covering 433 + 915): 315, 345, 390, 868
+      - EU/UK/EEA/CH   (typically already covering 433 + 868): 169.4, 915, 315, 345
+        * 169.4 MHz is used for some metering in parts of Europe; needs an appropriate antenna.
+    """
+
+    cc = (country_code or "").strip().upper()
+    u = {s.strip().lower() for s in (used_freqs or set()) if s.strip()}
+
+    if cc and cc in _EU_868_COUNTRIES:
+        candidates = ["169.4M", "868.95M", "869.525M", "915M"]
+    else:
+        candidates = ["315M", "345M", "390M", "868M"]
+
+    chosen = [f for f in candidates if f.strip().lower() not in u]
+    return ",".join(chosen)

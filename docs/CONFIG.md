@@ -39,26 +39,36 @@ debug_raw_json: false # Print raw rtl_433 JSON for debugging
 battery_ok_clear_after: 300
 # Note: Battery Low uses a long MQTT expire_after (24h+) to avoid going 'unavailable' for devices that report battery infrequently.
 
-# Multi-Radio Configuration (leave empty for auto-detection)
-rtl_config:
-  - name: Weather Radio # Friendly name
-    status_id: "0" # Optional: controls the host radio status entity name
-    id: "101" # RTL-SDR serial number
-    freq: 433.92M # Frequency
-    rate: 250k # Sample rate (optional)
-  - name: Utility Meter
-    status_id: "1"
-    id: "102"
-    freq: 915M
-    rate: 250k
-> Note: If `rtl_config` is empty, RTL-HAOS runs in “auto mode” and will attach to the first detected RTL-SDR only.
-> Configure `rtl_config` to run multiple dongles.
+# Multi-Radio Configuration
+#
+# Leave rtl_config empty for Auto Multi-Radio (plug-and-go).
+rtl_config: []
+
+# Region preset (dropdown in UI) used by Auto Multi-Radio for Radio #2
+# auto = use Home Assistant country when available
+rtl_auto_band_plan: auto     # auto|us|eu|world
 
 # Device Filtering
 device_blacklist: # Block specific device patterns
   - "SimpliSafe*"
   - "EezTire*"
 device_whitelist: [] # If set, only allow these patterns
+```
+
+### Manual multi-radio example (rtl_config)
+
+If you want full control, set `rtl_config` explicitly (manual mode disables auto mode):
+
+```yaml
+rtl_config:
+  - name: Weather Radio
+    id: "101"
+    freq: 433.92M
+    rate: 250k
+  - name: Utility Meter
+    id: "102"
+    freq: 915M
+    rate: 1024k
 ```
 
 ---

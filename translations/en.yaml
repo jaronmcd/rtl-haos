@@ -42,10 +42,20 @@ configuration:
       Seconds the battery must remain OK before clearing a LOW alert.
       Set to 0 to clear immediately.
 
+  rtl_auto_band_plan:
+    name: Region / Band Plan
+    description: >-
+      The only setting needed for auto mode.
+      auto = use Home Assistant country when available.
+      us = force 915 MHz for Radio #2.
+      eu = force 868 MHz for Radio #2.
+      world = hop 868/915 for Radio #2 (best when country is unknown).
+
   rtl_config:
     name: Radio Configuration
     description: >-
-      Advanced: Define multiple radios manually. Click 'Add' to configure a new stick.
+      Manual mode (advanced): Define radios explicitly. If this list is non-empty, auto mode is disabled.
+      Click 'Add' to configure a stick.
     keys:
       name:
         name: Radio Name

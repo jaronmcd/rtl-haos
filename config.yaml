@@ -1,6 +1,6 @@
 name: "RTL-HAOS"
 description: "RTL-SDR to Home Assistant MQTT bridge with signal diagnostics and system monitoring"
-version: "1.1.11"
+version: "1.1.12"
 slug: rtl-haos
 url: "https://github.com/jaronmcd/rtl-haos"
 arch:
@@ -37,6 +37,15 @@ options:
   # --- Advanced Radio Configuration ---
   rtl_config: []
 
+  # --- Auto Multi-Radio (Zero-Clutter UI) ---
+  # If rtl_config is empty, RTL-HAOS will auto-start 1-3 radios depending on how many
+  # RTL-SDR dongles are detected.
+  #
+  # The ONLY user-facing knob in auto mode is the "Region / Band Plan" dropdown.
+  # If you want to control rates / hopping / exact frequencies, define rtl_config
+  # manually (and you are responsible for the full radio config).
+  rtl_auto_band_plan: "auto"
+
   # --- Device Filtering ---
   # Define specific Devices or ID Numbers to allow or disallow
   # Example:
@@ -60,17 +69,20 @@ schema:
   rtl_show_timestamps: bool
   verbose_transmissions: bool
 
+  # Auto multi-radio (when rtl_config is empty)
+  rtl_auto_band_plan: list(auto|us|eu|world)
+
   battery_ok_clear_after: int
 
   # --- DELETED GLOBAL SCHEMA ---
   # The UI will no longer show the 3 text boxes for defaults.
 
   rtl_config:
-      - name: str
-        freq: str
-        id: str?
-        rate: str?
-        hop_interval: int?
+    - name: str
+      freq: str
+      id: str?
+      rate: str?
+      hop_interval: int?
 
   device_blacklist:
     - str

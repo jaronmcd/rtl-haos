@@ -127,4 +127,5 @@ def test_main_auto_mode_warns_when_ignoring_extra_radios(mocker, capsys):
 
     main.main()
     out = capsys.readouterr().out.lower()
-    assert "ignored" in out
+    assert "auto multi-radio enabled" in out
+    assert "radio #2" in out

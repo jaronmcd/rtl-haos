@@ -95,6 +95,7 @@ FIELD_META = {
     # --- Utility Meters ---
     "Consumption":          ("ft³", "gas", "mdi:fire", "Gas Usage"),
     "consumption":          ("ft³", "gas", "mdi:fire", "Gas Usage"),
+    "consumption_data":     ("ft³", "gas", "mdi:fire", "Gas Usage"),
     "meter_reading":        ("ft³", "water", "mdi:water-pump", "Water Reading"),
 
     # --- Battery ---
