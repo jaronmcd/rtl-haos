@@ -170,6 +170,7 @@ class Settings(BaseSettings):
             "storm_dist",
             "Consumption",
             "consumption",
+            "consumption_data",
             "meter_reading",
             "moisture",
         ]
