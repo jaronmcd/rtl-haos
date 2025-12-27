@@ -481,39 +481,11 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                         del data["consumption"]
 
                     # SCM / ERT Meters
-                    # rtl_433 decoders are not consistent here:
-                    #  - some emit "Consumption" (SCMplus)
-                    #  - some emit "consumption" (many SCM/ERT)
-                    #  - some emit "consumption_data" (ERT-SCM)
-                    # Normalize them all to a single published field "Consumption" so Home Assistant
-                    # gets the correct device_class/unit/state_class and it lands in MAIN_SENSORS.
-
-                    # Common case: lowercase "consumption"
                     if ("SCM" in model or "ERT" in model) and data.get("consumption") is not None:
                         data_processor.dispatch_reading(
-                            clean_id,
-                            "Consumption",
-                            data["consumption"],
-                            dev_name,
-                            model,
-                            radio_name=radio_name,
-                            radio_freq=freq_display,
+                            clean_id, "Consumption", data["consumption"], dev_name, model, radio_name=radio_name, radio_freq=freq_display
                         )
                         del data["consumption"]
-
-                    # ERT-SCM: "consumption_data" (otherwise it becomes a diagnostic 'Consumption Data' entity)
-                    elif ("SCM" in model or "ERT" in model) and data.get("consumption_data") is not None:
-                        data_processor.dispatch_reading(
-                            clean_id,
-                            "Consumption",
-                            data["consumption_data"],
-                            dev_name,
-                            model,
-                            radio_name=radio_name,
-                            radio_freq=freq_display,
-                        )
-                        del data["consumption_data"]
-
 
                     # Dew point
                     t_c = data.get("temperature_C")
