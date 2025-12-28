@@ -138,6 +138,6 @@ RTL_SHOW_TIMESTAMPS=false
 # Print rtl_433 JSON output
 DEBUG_RAW_JSON=true
 ```
-See [.env.example](.env.example) for all available configuration options.
+See [.env.example](../.env.example) for all available configuration options.
 
 ---
