@@ -1,4 +1,9 @@
 # Changelog
+
+## v1.1.13
+- **FIX:** Home Assistant discovery for **ERT-SCM electric meters** so they no longer appear as gas meters; they now publish as **Energy (kWh)**.
+- **FIX:** **consumption readings being 100× too large** for **ERT-SCM** and **SCMplus** meters by normalizing the reported consumption value (÷100) so the sensor matches the physical meter display.
+
 ## v1.1.12
 - **NEW:** Auto multi-radio: starts multiple radios when multiple RTL-SDR dongles are present.
 - **NEW:** Region / Band Plan dropdown (`rtl_auto_band_plan: auto|us|eu|world`) used for Radio #2 in auto multi-mode.
