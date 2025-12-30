@@ -556,15 +556,20 @@ class HomeNodeMQTT:
         if field in {"Consumption", "consumption", "consumption_data", "meter_reading"}:
             self._utility_last_raw[(clean_id, field)] = value
 
-        # Normalize raw meter readings: some models report hundredths.
-        # Example: 2735618 => 27356.18 (divide by 100)
-        if field in {"Consumption", "consumption", "consumption_data"}:
-            scale = {"ERT-SCM": 0.01, "SCMplus": 0.01, "SCM": 0.01}.get(str(device_model).strip())
+        # Normalize raw meter readings for certain models/fields.
+        #
+        # IMPORTANT:
+        # - ERT-SCM 'consumption_data' is commonly reported in hundredths (e.g., 2735618 => 27356.18).
+        # - SCMplus/SCM gas 'Consumption' is treated as *raw cubic feet* (no ÷100 here).
+        #   Display-unit conversions (ft³ <-> CCF) happen later in _apply_utility_value_conversion().
+        if field in {"consumption_data"}:
+            scale = {"ERT-SCM": 0.01}.get(str(device_model).strip())
             if scale:
                 try:
                     out_value = round(float(out_value) * scale, 2)
                 except (TypeError, ValueError):
                     pass
+
 
 
 

@@ -59,7 +59,7 @@ def test_scmplus_ccf_updates_after_metertype(monkeypatch):
     h = mqtt_handler.HomeNodeMQTT(version="vtest")
     c = h.client
 
-    # 1) Consumption arrives first (SCMplus reports hundredths)
+    # 1) Consumption arrives first (SCMplus Consumption is raw ft³)
     h.send_sensor("device_x", "Consumption", 217504, "SCMplus deadbeef", "SCMplus")
 
     # Initial config uses default ft³ from FIELD_META
@@ -68,7 +68,7 @@ def test_scmplus_ccf_updates_after_metertype(monkeypatch):
 
     # Initial state (normalized to ft³)
     st1 = _last_state_payload(c, "deadbeef", "Consumption")
-    assert st1 == "2175.04"
+    assert st1 == "217504"
 
     # 2) MeterType arrives later, triggers refresh of utility entities
     h.send_sensor("device_x", "MeterType", "Gas", "SCMplus deadbeef", "SCMplus")
@@ -80,4 +80,4 @@ def test_scmplus_ccf_updates_after_metertype(monkeypatch):
 
     # State should be re-published converted to CCF (ft³ / 100)
     st2 = _last_state_payload(c, "deadbeef", "Consumption")
-    assert st2 == "21.7504"
+    assert st2 == "2175.04"
