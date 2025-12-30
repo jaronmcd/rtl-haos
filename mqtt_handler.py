@@ -167,6 +167,10 @@ class HomeNodeMQTT:
         # Used to correctly classify generic fields like 'consumption_data' for ERT-SCM endpoints.
         self._commodity_by_device = {}  # clean_id -> 'electric'|'gas'|'water'
 
+        # Remember the last device model we saw per device.
+        # Used for model-specific unit overrides (e.g., Neptune-R900 reports gallons).
+        self._device_model_by_id: dict[str, str] = {}
+
         # Remember last raw utility readings so we can re-publish state/config
         # once we learn commodity (or unit preferences) from later fields.
         # Key: (clean_id, field) -> raw_value
@@ -199,6 +203,10 @@ class HomeNodeMQTT:
                 return ("CCF", "gas", "mdi:fire", "Gas Usage")
             return ("ft³", "gas", "mdi:fire", "Gas Usage")
         if commodity == "water":
+            # Neptune R900 (protocol 228) typically reports gallons (often in tenths, normalized upstream).
+            model = str(self._device_model_by_id.get(clean_id, "") or "").strip()
+            if field == "meter_reading" and model.lower().startswith("neptune-r900"):
+                return ("gal", "water", "mdi:water-pump", "Water Usage")
             return ("ft³", "water", "mdi:water-pump", "Water Reading")
         return None
 
@@ -529,6 +537,10 @@ class HomeNodeMQTT:
         self.tracked_devices.add(device_name)
 
         clean_id = clean_mac(sensor_id) 
+        
+        # Remember model for model-specific discovery/unit overrides.
+        self._device_model_by_id[clean_id] = str(device_model)
+
         unique_id_base = clean_id
         state_topic_base = clean_id
 

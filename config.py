@@ -172,6 +172,9 @@ class Settings(BaseSettings):
             "consumption",
             "consumption_data",
             "meter_reading",
+            "volume_gal",
+            "volume_ft3",
+            "volume_m3",
             "moisture",
         ]
     )
