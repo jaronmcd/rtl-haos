@@ -96,7 +96,7 @@ FIELD_META = {
     "Consumption":          ("ft³", "gas", "mdi:fire", "Gas Usage"),
     "consumption":          ("ft³", "gas", "mdi:fire", "Gas Usage"),
     "consumption_data":     ("ft³", "gas", "mdi:fire", "Gas Usage"),
-    "meter_reading":        ("ft³", "water", "mdi:water-pump", "Water Reading"),
+    "meter_reading":        ("gal", "water", "mdi:water-pump", "Water Reading"),
     # Common rtl_433 water meter fields
     # - Badger ORION emits volume_gal
     # - Many wireless meter protocols expose volume in common units
