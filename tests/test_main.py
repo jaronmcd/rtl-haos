@@ -26,13 +26,25 @@ def import_main_safely():
     return m
 
 
-def test_get_version_parses_config_yaml(mocker):
+def test_get_version_parses_config_yaml(mocker, monkeypatch):
     main = import_main_safely()
 
-    mocker.patch("os.path.exists", return_value=True)
+    # Ensure no build metadata is appended for this test
+    monkeypatch.delenv("RTL_HAOS_BUILD", raising=False)
+    monkeypatch.delenv("RTL_HAOS_TWEAK", raising=False)
     mocker.patch("builtins.open", return_value=io.StringIO('name: X\nversion: "9.9.9"\n'))
 
     assert main.get_version() == "v9.9.9"
+
+
+def test_get_version_appends_build_metadata(mocker, monkeypatch):
+    main = import_main_safely()
+
+    monkeypatch.setenv("RTL_HAOS_BUILD", "dev build")
+    mocker.patch("builtins.open", return_value=io.StringIO('name: X\nversion: "9.9.9"\n'))
+
+    # Space in build should be sanitized to a dash
+    assert main.get_version() == "v9.9.9+dev-build"
 
 
 def test_check_dependencies_missing_rtl_433_exits(mocker):
