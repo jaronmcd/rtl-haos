@@ -51,6 +51,10 @@ def test_main_timestamped_print_formats_startup_and_debug(monkeypatch):
 def test_main_get_version_reads_config_yaml(tmp_path, monkeypatch):
     import main
 
+    # Ensure build metadata does not affect this base-version test.
+    monkeypatch.delenv("RTL_HAOS_BUILD", raising=False)
+    monkeypatch.delenv("RTL_HAOS_TWEAK", raising=False)
+
     (tmp_path / "config.yaml").write_text('name: x\nversion: "1.2.3"\n')
     monkeypatch.setattr(main, "__file__", str(tmp_path / "main.py"))
 

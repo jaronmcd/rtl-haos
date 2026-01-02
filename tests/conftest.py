@@ -16,6 +16,18 @@ warnings.filterwarnings(
     category=RuntimeWarning,
 )
 
+
+@pytest.fixture(autouse=True)
+def _clear_build_metadata_env(monkeypatch):
+    """Keep tests deterministic regardless of the developer's shell env.
+
+    RTL-HAOS can append optional build metadata (RTL_HAOS_BUILD/RTL_HAOS_TWEAK)
+    to the displayed version. Tests should explicitly set these env vars when
+    needed, rather than inheriting them from the host environment.
+    """
+    monkeypatch.delenv("RTL_HAOS_BUILD", raising=False)
+    monkeypatch.delenv("RTL_HAOS_TWEAK", raising=False)
+
 # Ensure we can import project modules from repo root
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
