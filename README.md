@@ -41,6 +41,10 @@ See rtl_433 documentation for supported devices: https://github.com/merbanan/rtl
   - **Dew Point:** Automatically calculated from Temp + Humidity sensors.
   - **Multi-Radio Support:** Run multiple dongles on different frequencies simultaneously.
   
+- **Advanced rtl_433 passthrough:** Optionally pass arbitrary `rtl_433` flags and/or a full `rtl_433` config file (`-c`) globally or per radio (gain/AGC/ppm/tuner settings/decoder selection).
+- **Stable version comparisons + richer display:** Base add-on version stays `X.Y.Z` for Supervisor, while logs/device info can show `vX.Y.Z+<build>`.
+- **New diagnostics:** Bridge publishes the running `rtl_433` version as a diagnostic sensor (`rtl_433 Version`).
+
 > **Note (multi-dongle setups):** If you plug in multiple RTL-SDR dongles and leave `rtl_config: []`, RTL-HAOS will start multiple radios automatically.
 > To force RTL-HAOS to use only one specific stick (and leave others for other software), define `rtl_config` (manual mode).
 
@@ -162,7 +166,11 @@ This section applies to **Docker** and **Native** installation methods only.
 
 ### Upgrade Notes
 
-Upgrading from v1.1.13? See CHANGELOG.md → v1.1.14 → “Migration from v1.1.13” (gas totals may change magnitude; optional gas_unit: ccf).
+Upgrading from v1.1.14 (or earlier)?
+
+- **Displayed version may include `+<build>`** (example: `v1.1.20+046cc83`). This is *only* build metadata for logs/device info; the base add-on `version:` in `config.yaml` remains strict `X.Y.Z` for Home Assistant Supervisor comparisons.
+- **New optional rtl_433 passthrough knobs** are available (global env vars and per-radio fields) if you need manual gain/AGC/ppm/tuner settings or a full `rtl_433` config file.
+- **Add-on now maps `/share`**, so you can drop `rtl_433` config files into your HAOS share and reference them from RTL-HAOS.
 
 ### Setup
 
@@ -189,6 +197,36 @@ MQTT_PASS=password
 ```
 
 ### Advanced Configuration
+
+**rtl_433 passthrough (advanced tuning):**
+
+Use these when you need manual `rtl_433` controls (gain/AGC/ppm/tuner settings) or want to supply a full `rtl_433` config file (`-c`).
+
+```bash
+# Extra flags appended to every rtl_433 invocation (global defaults)
+RTL_433_ARGS='-g 40 -p 0'
+
+# Provide a config file passed via -c
+# - Docker/Native: relative to your working directory
+# - HA add-on: prefer putting files in /share and referencing them (e.g. rtl_433.conf)
+RTL_433_CONFIG_PATH='rtl_433.conf'
+
+# Or supply inline config content (RTL-HAOS writes a temp file and passes it via -c)
+RTL_433_CONFIG_INLINE=$'-g 25\n-R 104\n'
+
+# Optional override for rtl_433 binary path/name
+RTL_433_BIN='rtl_433'
+```
+
+Per-radio overrides are also supported via `rtl_config` (fields like `args`, `device`, `config_path`, `config_inline`, `bin`). See **docs/CONFIG.md** for full examples.
+
+**Build metadata (optional):**
+
+```bash
+# Appended to the displayed version as SemVer build metadata: vX.Y.Z+BUILD
+# (Does not change Supervisor update comparisons)
+RTL_HAOS_BUILD='dev.local'
+```
 
 **Multi-Radio Setup:**
 
