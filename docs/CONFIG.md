@@ -73,6 +73,23 @@ rtl_config:
 
 ### Advanced: full rtl_433 passthrough
 
+### Drop-in `rtl_433.conf` support (default search paths)
+
+`rtl_433` itself will automatically load the first `rtl_433.conf` it finds in its default
+search locations (current directory, `XDG_CONFIG_HOME/rtl_433/rtl_433.conf`, then the
+system config dir).
+
+In Home Assistant add-on mode, RTL-HAOS sets `XDG_CONFIG_HOME=/config` for the `rtl_433`
+subprocess (unless you already set `XDG_CONFIG_HOME`). That means you can simply create:
+
+- `/config/rtl_433/rtl_433.conf`
+
+…and `rtl_433` will pick it up automatically at startup, without needing to set `rtl_433_config_path`.
+Anything set by RTL-HAOS on the command line (freq/rate/protocols/args) still applies and can override
+values from the config file, just like running `rtl_433` normally.
+
+
+
 RTL-HAOS can pass **arbitrary rtl_433 flags** and/or a full **rtl_433 config file** (same format as `rtl_433 -c`: one argument per line). This is the most flexible way to tune reception (gain/ppm/AGC), constrain decoders, or use tuner settings.
 
 **Global passthrough & overrides (applies to all radios):**
@@ -105,6 +122,16 @@ rtl_433_args: "-s 2000k"
 ```
 
 This will override the per-radio/auto `rate:` values for every radio, and you’ll see a WARNING per radio showing what was overridden.
+
+### Gotchas when passing rtl_433 flags
+
+A few common pitfalls when using `rtl_433_args` / per-radio `args`:
+
+- **Don’t use flags that intentionally exit** (e.g. `-V` version, `-h` help). `rtl_433` will quit immediately and the add-on will restart it.
+  - Similarly, using **finite-run flags** like `-T <seconds>` or `-n <samples>` will make `rtl_433` stop and get restarted.
+- **Be careful enabling rtl_433’s built-in MQTT output** (`-F mqtt...`). RTL-HAOS already publishes to MQTT after parsing JSON, so turning on rtl_433 MQTT output usually results in **duplicate events** (two publishers).
+- If you add additional `-F` outputs for debugging (e.g. `-F kv`, `-F csv:...`), make sure `-F json` is still present. RTL-HAOS will force JSON output for decoding.
+
 
 **Per-radio passthrough (adds radio-specific flags):**
 

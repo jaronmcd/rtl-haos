@@ -13,6 +13,24 @@ import os
 import shlex
 from pathlib import Path
 
+# If running inside Home Assistant, /config is mounted. rtl_433's default conf search
+# honors XDG_CONFIG_HOME; set a safe default so users can drop:
+#   /config/rtl_433/rtl_433.conf
+# without needing to specify -c in RTL-HAOS.
+def _rtl433_subprocess_env() -> dict:
+    env = os.environ.copy()
+    # Respect user-supplied XDG_CONFIG_HOME if present
+    if not env.get("XDG_CONFIG_HOME"):
+        for candidate in ("/config", "/share", "/data"):
+            try:
+                if Path(candidate).is_dir():
+                    env["XDG_CONFIG_HOME"] = candidate
+                    break
+            except Exception:
+                continue
+    return env
+
+
 from datetime import datetime
 from typing import Optional
 
@@ -732,6 +750,7 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
 
             process = subprocess.Popen(
                 cmd,
+                env=_rtl433_subprocess_env(),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
