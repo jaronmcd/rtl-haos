@@ -17,7 +17,10 @@ See rtl_433 documentation for supported devices: https://github.com/merbanan/rtl
 ## ✨ Features
 
 - **Auto Multi-Radio (plug-and-go):** If you leave `rtl_config` empty and the add-on detects multiple RTL-SDR dongles, it will automatically start **1–3** `rtl_433` instances (based on how many dongles you plug in).
-  - **Zero-clutter UI:** the only auto-mode knob in the add-on UI is the **Region / Band Plan** dropdown: `rtl_auto_band_plan: auto|us|eu|world`.
+  - **Zero-clutter UI:** auto-mode knobs in the add-on UI:
+    - `rtl_auto_band_plan: auto|us|eu|world` (Region / Band Plan)
+    - `rtl_auto_priority: primary|secondary|hopper` (choose which auto radio claims the **first** dongle)
+    - These Auto Mode settings are **ignored** as soon as you add any entries to `rtl_config`.
   - **Sharing SDRs / reserving a dongle:** In auto mode, RTL-HAOS will use additional RTL-SDR dongles if they’re plugged in.
     If you need to keep a stick free for another add-on/app (ADS-B, another rtl_433 stack, etc.), switch to **manual mode** by defining `rtl_config` so RTL-HAOS only claims the dongle(s) you specify.
   - **Radio #1:** default 433.92 MHz (typical sensors)

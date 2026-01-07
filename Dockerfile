@@ -22,16 +22,44 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
+
 # ============================================================================
-# STAGE 2: Runtime - Slim final image
+# STAGE 2: rtl_433 builder - build rtl_433 from upstream git
+# ============================================================================
+FROM ${BUILD_FROM} as rtl433_builder
+
+# Set this to a tag/branch/commit SHA you want, e.g. "master", "25.02", or a full SHA.
+ARG RTL433_GIT_REF=master
+
+RUN apk add --no-cache \
+    git \
+    build-base \
+    cmake \
+    pkgconf \
+    libusb-dev \
+    librtlsdr-dev
+
+WORKDIR /tmp
+
+RUN git clone https://github.com/merbanan/rtl_433.git /tmp/rtl_433 \
+    && cd /tmp/rtl_433 \
+    && git checkout "${RTL433_GIT_REF}" \
+    && cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr \
+    && cmake --build build \
+    && DESTDIR=/tmp/rtl433-install cmake --install build
+
+# ============================================================================
+# STAGE 3: Runtime - Slim final image
 # ============================================================================
 FROM ${BUILD_FROM}
 
-# Install only runtime dependencies
+# Install only runtime dependencies (NOTE: no rtl_433 apk package)
 RUN apk add --no-cache \
     rtl-sdr \
-    rtl_433 \
     libusb
+
+# Copy rtl_433 binary built from git
+COPY --from=rtl433_builder /tmp/rtl433-install/usr/bin/rtl_433 /usr/bin/rtl_433
 
 WORKDIR /app
 
@@ -43,13 +71,6 @@ COPY . ./
 COPY run.sh /
 
 # Optional internal build metadata (SemVer build metadata). Kept out of config.yaml.
-#
-# Note: Home Assistant's add-on build system provides BUILD_VERSION/BUILD_ARCH/BUILD_FROM by default,
-# but does not provide a git SHA.
-#
-# For "HAOS pulls from git" installs, we derive a short SHA from minimal .git metadata (HEAD/refs)
-# that is temporarily included via .dockerignore exceptions. We then write it to /app/build.txt and
-# remove /app/.git so the final image stays clean.
 ARG RTL_HAOS_BUILD=""
 ENV RTL_HAOS_BUILD="${RTL_HAOS_BUILD}"
 

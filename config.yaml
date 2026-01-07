@@ -57,6 +57,12 @@ options:
   # manually (and you are responsible for the full radio config).
   rtl_auto_band_plan: "auto"
 
+  # Which auto radio gets the first detected dongle when rtl_config is empty.
+  # primary   : 433.92M (typical sensors)
+  # secondary : region-aware high band (868/915)
+  # hopper    : regional hopper (often includes 315M)
+  rtl_auto_priority: "primary"
+
   # --- Device Filtering ---
   # Define specific Devices or ID Numbers to allow or disallow
   # Example:
@@ -87,14 +93,6 @@ schema:
   rtl_433_config_inline: str?
   rtl_433_bin: str?
 
-  # Auto multi-radio (when rtl_config is empty)
-  rtl_auto_band_plan: list(auto|us|eu|world)
-
-  battery_ok_clear_after: int
-
-  # --- DELETED GLOBAL SCHEMA ---
-  # The UI will no longer show the 3 text boxes for defaults.
-
   rtl_config:
     - name: str
       freq: str
@@ -118,6 +116,15 @@ schema:
       config_path: str?
       config_inline: str?
       bin: str?
+
+  # Auto multi-radio (when rtl_config is empty)
+  rtl_auto_band_plan: list(auto|us|eu|world)
+  rtl_auto_priority: list(primary|secondary|hopper)
+
+  battery_ok_clear_after: int
+
+  # --- DELETED GLOBAL SCHEMA ---
+  # The UI will no longer show the 3 text boxes for defaults.
 
   device_blacklist:
     - str

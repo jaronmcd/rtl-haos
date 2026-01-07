@@ -63,6 +63,7 @@ def run_main(
     auto_multi=True,
     auto_max_radios=0,
     auto_hard_cap=3,
+    auto_priority="primary",
     country="US",
     band_plan="auto",
     secondary_defaults=("915M", 0),
@@ -127,6 +128,7 @@ def run_main(
     monkeypatch.setattr(cfg, "RTL_AUTO_MAX_RADIOS", auto_max_radios, raising=False)
     monkeypatch.setattr(cfg, "RTL_AUTO_HARD_CAP", auto_hard_cap, raising=False)
     monkeypatch.setattr(cfg, "RTL_AUTO_BAND_PLAN", band_plan, raising=False)
+    monkeypatch.setattr(cfg, "RTL_AUTO_PRIORITY", auto_priority, raising=False)
     monkeypatch.setattr(cfg, "RTL_AUTO_SECONDARY_FREQ", secondary_override, raising=False)
     monkeypatch.setattr(cfg, "RTL_AUTO_HOPPER_FREQS", hopper_override, raising=False)
 
@@ -166,6 +168,67 @@ def test_auto_single_starts_primary_only(monkeypatch):
     assert r0["rate"] == "250k"
     assert r0["hop_interval"] == 0
     assert r0["index"] == 0
+
+def test_auto_single_secondary_priority_starts_secondary_band(monkeypatch):
+    started = run_main(
+        monkeypatch,
+        detected_devices=[{"id": "A", "index": 0, "name": "RTL-A"}],
+        rtl_config=[],
+        auto_multi=True,
+        auto_priority="secondary",
+        secondary_defaults=("915M", 0),
+    )
+    assert len(started) == 1
+    assert started[0]["slot"] == 0
+    assert started[0]["role"] == "secondary"
+    assert started[0]["freq"] == "915M"
+
+
+def test_auto_multi_two_radios_secondary_priority_puts_secondary_first(monkeypatch):
+    started = run_main(
+        monkeypatch,
+        detected_devices=[
+            {"id": "A", "index": 0, "name": "RTL-A"},
+            {"id": "B", "index": 1, "name": "RTL-B"},
+        ],
+        rtl_config=[],
+        auto_multi=True,
+        auto_priority="secondary",
+        secondary_defaults=("915M", 0),
+    )
+    assert len(started) == 2
+    assert started[0]["slot"] == 0
+    assert started[0]["role"] == "secondary"
+    assert started[0]["freq"] == "915M"
+    assert started[1]["slot"] == 1
+    assert started[1]["role"] == "primary"
+    assert started[1]["freq"] == "433.92M"
+
+
+def test_auto_multi_three_radios_hopper_priority_keeps_hopper_instead_of_split(monkeypatch):
+    started = run_main(
+        monkeypatch,
+        detected_devices=[
+            {"id": "A", "index": 0, "name": "RTL-A"},
+            {"id": "B", "index": 1, "name": "RTL-B"},
+            {"id": "C", "index": 2, "name": "RTL-C"},
+        ],
+        rtl_config=[],
+        auto_multi=True,
+        auto_priority="hopper",
+        country="US",
+        secondary_defaults=("868M,915M", 0),
+        hopper_defaults="315M,345M,390M,868M",
+    )
+    assert len(started) == 3
+    assert started[0]["role"] == "hopper"
+    assert started[0]["freq"].split(",")[0] == "315M"
+    assert started[1]["role"] == "primary"
+    assert started[1]["freq"] == "433.92M"
+    assert started[2]["role"] == "secondary"
+    assert started[2]["freq"] == "868M,915M"
+    assert started[2]["hop_interval"] == 15
+
 
 
 def test_auto_multi_two_radios_us_secondary_915(monkeypatch):
@@ -305,6 +368,7 @@ def test_auto_multi_detected_count_respects_hard_cap(monkeypatch):
         auto_multi=True,
         auto_max_radios=0,  # detected count
         auto_hard_cap=3,
+    auto_priority="primary",
         country="US",
         secondary_defaults=("915M", 0),
     )

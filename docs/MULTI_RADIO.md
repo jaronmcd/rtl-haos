@@ -8,7 +8,14 @@ If you leave `rtl_config` empty (`rtl_config: []`), RTL-HAOS can automatically s
 
 Auto mode is designed to be **zero-clutter**: you install the add-on, plug in 1–3 dongles, and it starts the right number of radios automatically.
 
-The only auto-mode knob exposed in the add-on UI is the **Region / Band Plan** dropdown: `rtl_auto_band_plan` (default: `auto`).
+Auto mode exposes only a couple of **high-value** knobs in the add-on UI:
+
+- `rtl_auto_band_plan` (default: `auto`) — Region / Band Plan
+- `rtl_auto_priority` (default: `primary`) — Which auto radio claims the **first** detected dongle (useful for single-dongle setups)
+
+> **Mutually exclusive:** If `rtl_config` is non-empty (manual mode), Auto Mode is disabled and these `rtl_auto_*` settings are ignored.
+
+`rtl_auto_band_plan` affects the high-band defaults:
   - EU/UK/EEA/CH -> 868 MHz
   - US/CA/AU/NZ and most others -> 915 MHz
   - If HA country is unknown -> hops 868/915
