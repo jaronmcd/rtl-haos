@@ -72,6 +72,29 @@ Or at build time (if your build system passes args):
 docker build --build-arg RTL_HAOS_BUILD="$(git rev-parse --short HEAD)" -t rtl-haos:dev .
 ```
 
+### Docker build options (SoapySDR / HackRF)
+
+The image builds `rtl_433` from upstream git with `ENABLE_SOAPYSDR=ON`.
+
+HackRF support via SoapySDR requires the SoapySDR device module for HackRF (`SoapyHackRF`).
+The Dockerfile can build this module from source (controlled by `BUILD_SOAPYHACKRF`).
+
+#### Build args
+
+- `BUILD_SOAPYHACKRF` (default: `1`)
+  - `1`: build + install SoapyHackRF into the image
+  - `0`: skip building SoapyHackRF (HackRF won’t appear as a Soapy device)
+
+Example:
+
+    docker build --build-arg BUILD_SOAPYHACKRF=0 -t rtl-haos:dev .
+
+#### Note for HAOS add-on builds
+
+Home Assistant Supervisor does not reliably pass custom Docker build args for local add-on builds.
+So HAOS builds use the Dockerfile defaults unless you create a separate image/branch with different defaults.
+
+
 **HAOS add-on (local development)**
 
 Home Assistant Supervisor builds add-ons from the repo contents and does **not** reliably pass custom Docker build args for local add-ons. For local HAOS dev, the simplest options are:

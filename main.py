@@ -248,6 +248,7 @@ def main():
 
     if rtl_config:
         # --- A. MANUAL CONFIGURATION MODE ---
+        print("[STARTUP] Manual mode: rtl_config is non-empty -> auto mode is disabled (rtl_auto_* settings ignored).")
         print(f"[STARTUP] Loading {len(rtl_config)} radios from manual config.")
         configured_ids = set()
         seen_config_ids = set()
@@ -351,159 +352,188 @@ def main():
                 else:
                     print(f"[STARTUP] Auto Multi-Radio: HA country=unknown, band_plan={plan} -> secondary={sec_freq}")
 
+
+
                 radios = []
 
-                # --- Radio #1 (Primary) ---
-                dev1 = detected_devices[0]
-                name1 = dev1.get("name", "Primary")
+                # --- Auto Priority (easy way to flip which band gets the first dongle) ---
+                priority = str(getattr(config, "RTL_AUTO_PRIORITY", "primary") or "primary").strip().lower()
+                if priority not in ("primary", "secondary", "hopper"):
+                    print(f"[STARTUP] Auto Multi-Radio: rtl_auto_priority='{priority}' invalid; using 'primary'.")
+                    priority = "primary"
+                print(f"[STARTUP] Auto Multi-Radio: rtl_auto_priority={priority} -> first dongle role.")
 
-                def_freqs = str(config.RTL_DEFAULT_FREQ).split(",")
+                def _split_freq_list(freqs):
+                    return [s.strip() for s in str(freqs).split(",") if s.strip()]
+
+                # Build role configs (not yet bound to a specific dongle)
+                def_freqs = _split_freq_list(getattr(config, "RTL_DEFAULT_FREQ", "433.92M"))
                 def_hop = int(getattr(config, "RTL_DEFAULT_HOP_INTERVAL", 0) or 0)
                 if len(def_freqs) < 2:
                     def_hop = 0
                 elif def_hop <= 0:
                     def_hop = 60
 
-                radio1 = {
-                    "slot": 0,
+                primary_cfg = {
+                    "role": "primary",
                     "hop_interval": def_hop,
-                    "rate": getattr(config, "RTL_AUTO_PRIMARY_RATE", config.RTL_DEFAULT_RATE),
-                    "freq": config.RTL_DEFAULT_FREQ,
+                    "rate": getattr(config, "RTL_AUTO_PRIMARY_RATE", getattr(config, "RTL_DEFAULT_RATE", "250k")),
+                    "freq": getattr(config, "RTL_DEFAULT_FREQ", "433.92M"),
                 }
-                radio1.update(dev1)
-                rid1 = str(radio1.get("id") or "").strip() or "unknown"
-                radio1["name"] = f"{name1} (Auto 1, ID {rid1})"
-                radios.append(radio1)
 
-                # --- Radio #2 (Secondary) ---
-                if max_radios >= 2:
-                    dev2 = detected_devices[1]
-                    name2 = dev2.get("name", "Secondary")
+                sec_list = _split_freq_list(sec_freq)
 
-                    sec_list = [s.strip() for s in str(sec_freq).split(",") if s.strip()]
+                # If we have 3+ radios available and the plan contains multiple freqs,
+                # we normally split them across two radios to avoid hopping. If the user
+                # explicitly prioritizes the hopper, we keep hopper coverage and let the
+                # secondary radio hop instead.
+                split_secondary = bool(
+                    max_radios >= 3
+                    and len(detected_devices) >= 3
+                    and len(sec_list) >= 2
+                    and priority in ("primary", "secondary")
+                )
 
-                    # If we have 3+ radios available and the plan contains multiple freqs,
-                    # split them across Radio #2 and #3 to avoid hopping.
-                    freq2 = sec_freq
+                secondary_split_cfg = None
+                if split_secondary:
+                    secondary_cfg = {
+                        "role": "secondary",
+                        "hop_interval": 0,
+                        "rate": getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k"),
+                        "freq": sec_list[0],
+                    }
+                    secondary_split_cfg = {
+                        "role": "secondary_split",
+                        "hop_interval": 0,
+                        "rate": getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k"),
+                        "freq": sec_list[1],
+                    }
+                else:
                     hop2 = 0
-                    freq3 = None
-
-                    if max_radios >= 3 and len(detected_devices) >= 3 and len(sec_list) >= 2:
-                        freq2 = sec_list[0]
-                        freq3 = sec_list[1]
-                        hop2 = 0
-                    else:
-                        if len(sec_list) >= 2:
-                            hop2 = int(sec_hop or 0)
-                            if hop2 <= 0:
-                                hop2 = 15
-
-                    radio2 = {
-                        "slot": 1,
+                    if len(sec_list) >= 2:
+                        hop2 = int(sec_hop or 0)
+                        if hop2 <= 0:
+                            hop2 = 15
+                    secondary_cfg = {
+                        "role": "secondary",
                         "hop_interval": hop2,
                         "rate": getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k"),
-                        "freq": freq2,
+                        "freq": sec_freq,
                     }
-                    radio2.update(dev2)
-                    rid2 = str(radio2.get("id") or "").strip() or "unknown"
-                    radio2["name"] = f"{name2} (Auto 2, ID {rid2})"
-                    radios.append(radio2)
 
-                    # --- Radio #3 (Tertiary) ---
-                    if max_radios >= 3 and len(detected_devices) >= 3:
-                        dev3 = detected_devices[2]
-                        name3 = dev3.get("name", "Tertiary")
+                # Desired role order -> which logical radio claims the first dongle
+                if split_secondary:
+                    if priority == "secondary":
+                        plan_tokens = ["secondary", "secondary_split", "primary"]
+                    else:
+                        plan_tokens = ["primary", "secondary", "secondary_split"]
+                else:
+                    if priority == "secondary":
+                        plan_tokens = ["secondary", "primary", "hopper"]
+                    elif priority == "hopper":
+                        plan_tokens = ["hopper", "primary", "secondary"]
+                    else:
+                        plan_tokens = ["primary", "secondary", "hopper"]
 
-                        # If Radio #3 wasn't already assigned by splitting a multi-freq secondary plan,
-                        # use it as a regional "hopper" (when we know the region). This is intentionally
-                        # opportunistic and may miss bursts while tuned elsewhere.
-                        if not freq3:
-                            hopper_override = str(getattr(config, "RTL_AUTO_HOPPER_FREQS", "") or "").strip()
-                            hopper_hop = int(getattr(config, "RTL_AUTO_HOPPER_HOP_INTERVAL", 20) or 20)
-                            hopper_rate = getattr(config, "RTL_AUTO_HOPPER_RATE", getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k"))
+                tokens_to_start = plan_tokens[:max_radios]
 
-                            # Only auto-derive hopper freqs if we actually know the country.
-                            if hopper_override:
-                                hopper_freq = hopper_override
-                            elif country:
-                                # Derive a regional hopper plan that does NOT overlap with the
-                                # primary/secondary radios.
-                                used = {
-                                    s.strip().lower()
-                                    for s in str(radio1.get("freq", "")).split(",")
-                                    if s.strip()
-                                }
-                                used.update({s.strip().lower() for s in str(freq2).split(",") if s.strip()})
-                                hopper_freq = choose_hopper_band_defaults(country_code=country, used_freqs=used)
-                            else:
-                                hopper_freq = None
+                # Hopper role config (only if requested by token order)
+                hopper_cfg = None
+                if "hopper" in tokens_to_start:
+                    hopper_override = str(getattr(config, "RTL_AUTO_HOPPER_FREQS", "") or "").strip()
+                    hopper_hop = int(getattr(config, "RTL_AUTO_HOPPER_HOP_INTERVAL", 20) or 20)
+                    hopper_rate = getattr(config, "RTL_AUTO_HOPPER_RATE", getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k"))
 
-                            # If we don't have a hopper plan (unknown country and no override),
-                            # fall back to the "other" band to maximize coverage.
-                            if not hopper_freq:
-                                f2 = str(freq2).strip().lower()
-                                if f2.startswith("868"):
-                                    hopper_freq = "915M"
-                                elif f2.startswith("915"):
-                                    hopper_freq = "868M"
-                                else:
-                                    hopper_freq = "915M"
-                                hopper_hop = 0
-                                hopper_rate = getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k")
+                    used = set()
+                    for t in tokens_to_start:
+                        if t == "hopper":
+                            continue
+                        if t == "primary":
+                            used.update({s.strip().lower() for s in _split_freq_list(primary_cfg.get("freq", ""))})
+                        elif t == "secondary":
+                            used.update({s.strip().lower() for s in _split_freq_list(secondary_cfg.get("freq", ""))})
+                        elif t == "secondary_split" and secondary_split_cfg:
+                            used.update({s.strip().lower() for s in _split_freq_list(secondary_split_cfg.get("freq", ""))})
 
-                            # If only one frequency remains, disable hopping.
-                            hopper_list = [s.strip() for s in str(hopper_freq).split(",") if s.strip()]
+                    if hopper_override:
+                        hopper_freq = hopper_override
+                    elif country or priority == "hopper":
+                        hopper_freq = choose_hopper_band_defaults(country_code=country, used_freqs=used)
+                    else:
+                        hopper_freq = None
 
-                            # Avoid hopping onto a band we already cover with Radio #1/#2.
-                            used_freqs = {
-                                s.strip().lower() for s in str(radio1.get("freq", "")).split(",") if s.strip()
-                            }
-                            used_freqs.update(
-                                {s.strip().lower() for s in str(freq2).split(",") if s.strip()}
+                    if not hopper_freq:
+                        # If we don't have a hopper plan (unknown country and no override),
+                        # fall back to the "other" high band to maximize coverage.
+                        f2 = str(secondary_cfg.get("freq", "")).strip().lower()
+                        if f2.startswith("868"):
+                            hopper_freq = "915M"
+                        elif f2.startswith("915"):
+                            hopper_freq = "868M"
+                        else:
+                            hopper_freq = "915M"
+                        hopper_hop = 0
+                        hopper_rate = getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k")
+
+                    hopper_list = _split_freq_list(hopper_freq)
+
+                    # Avoid hopping onto a band we already cover with the other started radios.
+                    filtered = [f for f in hopper_list if f.strip().lower() not in used]
+                    if not filtered:
+                        if tokens_to_start and tokens_to_start[0] == "hopper":
+                            print(
+                                "[STARTUP] Auto Multi-Radio: Hopper has no non-overlapping bands remaining; "
+                                "starting hopper with overlaps (adjust rtl_auto_hopper_freqs/band plan to refine)."
                             )
-                            filtered = [f for f in hopper_list if f.strip().lower() not in used_freqs]
-                            hopper_list = filtered
-
-                            # If nothing remains after filtering, we refuse to overlap.
-                            if not hopper_list:
-                                print(
-                                    "[STARTUP] Auto Multi-Radio: Radio #3 hopper has no non-overlapping bands remaining; skipping Radio #3. "
-                                    "(Override rtl_auto_hopper_freqs or adjust band plan.)"
-                                )
-                                freq3 = None
-                                hop3 = 0
-                                rate3 = hopper_rate
-                                # Skip creating Radio #3 entirely.
-                                dev3 = None
-
-                            if len(hopper_list) < 2:
-                                hopper_hop = 0
-                            else:
-                                # Don't hop too aggressively; make the cycle predictable.
-                                if hopper_hop < 5:
-                                    hopper_hop = 5
-
-                            freq3 = ",".join(hopper_list)
-                            hop3 = hopper_hop
-                            rate3 = hopper_rate
+                            filtered = hopper_list
                         else:
-                            hop3 = 0
-                            rate3 = getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k")
+                            print(
+                                "[STARTUP] Auto Multi-Radio: Hopper has no non-overlapping bands remaining; skipping hopper radio. "
+                                "(Override rtl_auto_hopper_freqs or adjust band plan.)"
+                            )
 
-                        if not dev3 or not freq3:
-                            # Nothing to start for Radio #3.
-                            pass
+                    hopper_list = filtered
+                    if hopper_list:
+                        if len(hopper_list) < 2:
+                            hopper_hop = 0
                         else:
-                            radio3 = {
-                                "slot": 2,
-                                "hop_interval": hop3,
-                                "rate": rate3,
-                                "freq": freq3,
-                            }
-                            radio3.update(dev3)
-                            rid3 = str(radio3.get("id") or "").strip() or "unknown"
-                            radio3["name"] = f"{name3} (Auto 3, ID {rid3})"
-                            radios.append(radio3)
+                            if hopper_hop < 5:
+                                hopper_hop = 5
+
+                        hopper_cfg = {
+                            "role": "hopper",
+                            "hop_interval": hopper_hop,
+                            "rate": hopper_rate,
+                            "freq": ",".join(hopper_list),
+                        }
+
+                role_map = {
+                    "primary": primary_cfg,
+                    "secondary": secondary_cfg,
+                    "secondary_split": secondary_split_cfg,
+                    "hopper": hopper_cfg,
+                }
+
+                role_label = {
+                    "primary": "Primary",
+                    "secondary": "Secondary",
+                    "secondary_split": "Secondary (split)",
+                    "hopper": "Hopper",
+                }
+
+                # Bind roles to physical dongles by order, assigning slots 0..N-1
+                for slot, token in enumerate(tokens_to_start):
+                    cfg = role_map.get(token)
+                    if not cfg:
+                        continue
+                    dev = detected_devices[slot]
+                    r = dict(cfg)
+                    r["slot"] = slot
+                    r.update(dev)
+                    rid = str(r.get("id") or "").strip() or "unknown"
+                    dev_name = dev.get("name", role_label.get(token, token))
+                    r["name"] = f"{dev_name} (Auto {slot + 1}, {role_label.get(token, token)}, ID {rid})"
+                    radios.append(r)
 
                 for r in radios:
                     dev_name = r.get("name", "Auto")
@@ -512,14 +542,13 @@ def main():
                         print(f"[STARTUP] DEFAULT CONFIG WARNING: [Radio: {dev_name}] {w}")
 
                     slot = int(r.get("slot", 0) or 0)
-                    role = {0: "Primary", 1: "Secondary", 2: "Hopper"}.get(slot, "Radio")
+                    role = str(r.get("role") or "").strip() or "radio"
 
                     print(
-                        f"[STARTUP] Radio #{slot + 1} ({role}) ({r.get('name')}) "
-                        f"[USB Serial {r.get('usb_serial', r.get('id'))} (ID {r.get('id')}) / Index {r.get('index')}] -> ..."
+                        f"[STARTUP] Radio #{slot + 1} ({role_label.get(role, role)}) ({r.get('name')}) "
+                        f"[USB Serial {r.get('usb_serial', r.get('id'))} (ID {r.get('id')}) / Index {r.get('index')}] -> {r.get('freq')} "
                         f"(Rate: {r.get('rate')}, Hop: {r.get('hop_interval')})"
                     )
-
 
                     threading.Thread(
                         target=rtl_loop,
@@ -535,34 +564,94 @@ def main():
                     )
 
             else:
-                print("[STARTUP] Unconfigured Mode: Starting PRIMARY radio only.")
+
+                print("[STARTUP] Unconfigured Mode: Starting single radio (auto defaults).")
 
                 dev = detected_devices[0]
-                dev_name = dev.get("name", "Primary")
 
-                # 1. SMART DEFAULT LOGIC
-                def_freqs = config.RTL_DEFAULT_FREQ.split(",")
-                def_hop = config.RTL_DEFAULT_HOP_INTERVAL
-                if len(def_freqs) < 2:
-                    def_hop = 0
+                # Easy knob: pick which auto role claims the first dongle
+                priority = str(getattr(config, "RTL_AUTO_PRIORITY", "primary") or "primary").strip().lower()
+                if priority not in ("primary", "secondary", "hopper"):
+                    print(f"[STARTUP] Unconfigured Mode: rtl_auto_priority='{priority}' invalid; using 'primary'.")
+                    priority = "primary"
 
-                radio_setup = {
-                    "slot": 0,
-                    "hop_interval": def_hop,
-                    "rate": config.RTL_DEFAULT_RATE,
-                    "freq": config.RTL_DEFAULT_FREQ
-                }
+                country = get_homeassistant_country_code()
+                plan = getattr(config, "RTL_AUTO_BAND_PLAN", "auto")
+                sec_override = str(getattr(config, "RTL_AUTO_SECONDARY_FREQ", "") or "").strip()
+                sec_freq, sec_hop = choose_secondary_band_defaults(
+                    plan=plan,
+                    country_code=country,
+                    secondary_override=sec_override,
+                )
+
+                # 1. Build the requested role config
+                if priority == "secondary":
+                    sec_list = [s.strip() for s in str(sec_freq).split(",") if s.strip()]
+                    hop2 = 0
+                    if len(sec_list) >= 2:
+                        hop2 = int(sec_hop or 0)
+                        if hop2 <= 0:
+                            hop2 = 15
+                    radio_setup = {
+                        "slot": 0,
+                        "role": "secondary",
+                        "hop_interval": hop2,
+                        "rate": getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k"),
+                        "freq": sec_freq,
+                    }
+                elif priority == "hopper":
+                    hopper_override = str(getattr(config, "RTL_AUTO_HOPPER_FREQS", "") or "").strip()
+                    hopper_hop = int(getattr(config, "RTL_AUTO_HOPPER_HOP_INTERVAL", 20) or 20)
+                    hopper_rate = getattr(config, "RTL_AUTO_HOPPER_RATE", getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k"))
+
+                    if hopper_override:
+                        hopper_freq = hopper_override
+                    else:
+                        # In single-dongle mode, allowing hopper even if HA country is unknown is the whole point.
+                        hopper_freq = choose_hopper_band_defaults(country_code=country, used_freqs=set())
+
+                    hopper_list = [s.strip() for s in str(hopper_freq).split(",") if s.strip()]
+                    if len(hopper_list) < 2:
+                        hopper_hop = 0
+                    else:
+                        if hopper_hop < 5:
+                            hopper_hop = 5
+
+                    radio_setup = {
+                        "slot": 0,
+                        "role": "hopper",
+                        "hop_interval": hopper_hop,
+                        "rate": hopper_rate,
+                        "freq": ",".join(hopper_list),
+                    }
+                else:
+                    # Primary/default behavior (433.92M)
+                    def_freqs = str(getattr(config, "RTL_DEFAULT_FREQ", "433.92M")).split(",")
+                    def_hop = int(getattr(config, "RTL_DEFAULT_HOP_INTERVAL", 0) or 0)
+                    if len(def_freqs) < 2:
+                        def_hop = 0
+
+                    radio_setup = {
+                        "slot": 0,
+                        "role": "primary",
+                        "hop_interval": def_hop,
+                        "rate": getattr(config, "RTL_DEFAULT_RATE", "250k"),
+                        "freq": getattr(config, "RTL_DEFAULT_FREQ", "433.92M"),
+                    }
 
                 radio_setup.update(dev)
 
                 warns = validate_radio_config(radio_setup)
                 for w in warns:
-                    print(f"[STARTUP] DEFAULT CONFIG WARNING: [Radio: {dev_name}] {w}")
+                    print(f"[STARTUP] DEFAULT CONFIG WARNING: [Radio: {dev.get('name','Radio')}] {w}")
 
-                print(f"[STARTUP] Radio #1 ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
+                print(f"[STARTUP] Radio #1 ({dev.get('name','RTL')}) -> {radio_setup['freq']} (role={radio_setup.get('role')})")
 
                 if len(detected_devices) > 1:
-                    print(f"[STARTUP] WARNING: [System] {len(detected_devices)-1} additional SDR(s) detected but ignored. Enable Auto Multi-Radio or configure rtl_config to use them.")
+                    print(
+                        f"[STARTUP] WARNING: [System] {len(detected_devices)-1} additional SDR(s) detected but ignored. "
+                        "Enable Auto Multi-Radio or configure rtl_config to use them."
+                    )
 
                 threading.Thread(
                     target=rtl_loop,

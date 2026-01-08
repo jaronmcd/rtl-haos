@@ -103,6 +103,13 @@ class Settings(BaseSettings):
     #  - custom : use rtl_auto_secondary_freq
     rtl_auto_band_plan: str = Field(default="auto")
 
+    # Which auto radio should be assigned to the first detected dongle when rtl_config is empty.
+    # This is primarily useful for single-dongle setups:
+    #   - primary   -> default 433.92M (typical sensors)
+    #   - secondary -> region-aware high band (868/915)
+    #   - hopper    -> regional "interesting bands" hopper (often includes 315M)
+    rtl_auto_priority: str = Field(default="primary")
+
     # Used only when rtl_auto_band_plan=custom. Example: "920M" or "868M,915M".
     # If left blank, we fall back to the 'auto' behavior.
     rtl_auto_secondary_freq: str = Field(default="")
@@ -238,6 +245,7 @@ RTL_AUTO_MULTI = settings.rtl_auto_multi
 RTL_AUTO_MAX_RADIOS = settings.rtl_auto_max_radios
 RTL_AUTO_HARD_CAP = settings.rtl_auto_hard_cap
 RTL_AUTO_BAND_PLAN = settings.rtl_auto_band_plan
+RTL_AUTO_PRIORITY = settings.rtl_auto_priority
 RTL_AUTO_SECONDARY_FREQ = settings.rtl_auto_secondary_freq
 RTL_AUTO_PRIMARY_RATE = settings.rtl_auto_primary_rate
 RTL_AUTO_SECONDARY_RATE = settings.rtl_auto_secondary_rate

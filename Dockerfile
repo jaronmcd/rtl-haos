@@ -1,10 +1,64 @@
 # Dual-purpose Dockerfile: Home Assistant Add-on + Standalone Docker
+#
+# NOTE: We build rtl_433 from upstream git so we can enable optional SoapySDR
+# support (useful for Soapy-supported radios like HackRF, LimeSDR, PlutoSDR,
+# SoapyRemote, etc.).
 
-# ============================================================================
-# STAGE 1: Builder - Install Python dependencies with compilation support
-# ============================================================================
 ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.21
-FROM ${BUILD_FROM} as builder
+
+# ==========================================================================
+# STAGE 0: Build rtl_433 (and an optional SoapyHackRF module)
+# ==========================================================================
+FROM ${BUILD_FROM} AS rtl433_builder
+
+ARG RTL433_GIT_URL="https://github.com/merbanan/rtl_433.git"
+ARG RTL433_REF="master"
+
+# SoapyHackRF is not packaged in Alpine v3.21, so we build it from source to
+# make HackRF usable via SoapySDR.
+ARG BUILD_SOAPYHACKRF="1"
+ARG SOAPYHACKRF_GIT_URL="https://github.com/pothosware/SoapyHackRF.git"
+ARG SOAPYHACKRF_REF="master"
+
+RUN apk add --no-cache \
+    build-base \
+    cmake \
+    git \
+    pkgconf \
+    libusb-dev \
+    librtlsdr-dev \
+    soapy-sdr \
+    soapy-sdr-dev \
+    soapy-sdr-libs \
+    hackrf-dev \
+    hackrf-libs
+
+# Build and install SoapyHackRF (optional)
+RUN set -eux; \
+    if [ "${BUILD_SOAPYHACKRF}" = "1" ]; then \
+      git clone --depth 1 --branch "${SOAPYHACKRF_REF}" "${SOAPYHACKRF_GIT_URL}" /tmp/SoapyHackRF; \
+      cmake -S /tmp/SoapyHackRF -B /tmp/SoapyHackRF/build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr; \
+      cmake --build /tmp/SoapyHackRF/build -j"$(nproc)"; \
+      cmake --install /tmp/SoapyHackRF/build; \
+      rm -rf /tmp/SoapyHackRF; \
+    fi
+
+# Build and install rtl_433 with Soapy enabled
+RUN set -eux; \
+    git clone --branch "${RTL433_REF}" "${RTL433_GIT_URL}" /tmp/rtl_433; \
+    cmake -S /tmp/rtl_433 -B /tmp/rtl_433/build \
+      -DCMAKE_BUILD_TYPE=Release \
+      -DCMAKE_INSTALL_PREFIX=/usr \
+      -DENABLE_SOAPYSDR=ON; \
+    cmake --build /tmp/rtl_433/build -j"$(nproc)"; \
+    cmake --install /tmp/rtl_433/build; \
+    strip /usr/bin/rtl_433 || true; \
+    rm -rf /tmp/rtl_433
+
+# ==========================================================================
+# STAGE 1: Builder - Install Python dependencies with compilation support
+# ==========================================================================
+FROM ${BUILD_FROM} AS builder
 
 # Install build dependencies needed for compiling Python packages
 RUN apk add --no-cache \
@@ -22,16 +76,22 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-# ============================================================================
+# ==========================================================================
 # STAGE 2: Runtime - Slim final image
-# ============================================================================
+# ==========================================================================
 FROM ${BUILD_FROM}
 
-# Install only runtime dependencies
+# Runtime dependencies needed by rtl_433 + SoapySDR + USB access
 RUN apk add --no-cache \
     rtl-sdr \
-    rtl_433 \
-    libusb
+    libusb \
+    soapy-sdr \
+    soapy-sdr-libs \
+    hackrf-libs
+
+# Copy rtl_433 (and any Soapy modules we built) from the build stage
+COPY --from=rtl433_builder /usr/bin/rtl_433 /usr/bin/rtl_433
+COPY --from=rtl433_builder /usr/lib/SoapySDR /usr/lib/SoapySDR
 
 WORKDIR /app
 
@@ -43,13 +103,6 @@ COPY . ./
 COPY run.sh /
 
 # Optional internal build metadata (SemVer build metadata). Kept out of config.yaml.
-#
-# Note: Home Assistant's add-on build system provides BUILD_VERSION/BUILD_ARCH/BUILD_FROM by default,
-# but does not provide a git SHA.
-#
-# For "HAOS pulls from git" installs, we derive a short SHA from minimal .git metadata (HEAD/refs)
-# that is temporarily included via .dockerignore exceptions. We then write it to /app/build.txt and
-# remove /app/.git so the final image stays clean.
 ARG RTL_HAOS_BUILD=""
 ENV RTL_HAOS_BUILD="${RTL_HAOS_BUILD}"
 

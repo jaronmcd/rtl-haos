@@ -8,6 +8,47 @@ if [ -z "${RTL_HAOS_BUILD:-}" ] && [ -f /app/build.txt ]; then
 fi
 
 
+# Log helper: use bashio logging in HAOS add-on mode, fall back to stdout otherwise.
+log_info() {
+    if [ "$(type -t bashio::log.info || true)" = "function" ]; then
+        bashio::log.info "$1"
+    else
+        echo "[INFO] $1"
+    fi
+}
+
+log_warn() {
+    if [ "$(type -t bashio::log.warning || true)" = "function" ]; then
+        bashio::log.warning "$1"
+    else
+        echo "[WARN] $1"
+    fi
+}
+
+log_debug() {
+    if [ "$(type -t bashio::log.debug || true)" = "function" ]; then
+        bashio::log.debug "$1"
+    else
+        echo "[DEBUG] $1"
+    fi
+}
+
+log_rtl433_version() {
+    if command -v rtl_433 >/dev/null 2>&1; then
+        # rtl_433 -V prints the version string and exits.
+        local v
+        v="$(rtl_433 -V 2>&1 | head -n 1 | tr -d '\r\n')"
+        if [ -n "${v}" ]; then
+            log_info "rtl_433: ${v}"
+        else
+            log_warn "rtl_433: version unavailable (rtl_433 -V returned empty output)"
+        fi
+    else
+        log_warn "rtl_433 not found in PATH"
+    fi
+}
+
+
 # Detect if running as Home Assistant Add-on
 if [ -f /data/options.json ]; then
     # Home Assistant Add-on mode
@@ -69,10 +110,12 @@ if [ -f /data/options.json ]; then
 
     bashio::log.info "Starting RTL-HAOS bridge..."
     bashio::log.info "MQTT Host: ${MQTT_HOST:-none}:${MQTT_PORT:-none}"
+    log_rtl433_version
 else
     # Standalone Docker mode - use environment variables directly
     echo "[STARTUP] Running in standalone mode"
     echo "[STARTUP] MQTT Host: ${MQTT_HOST:-localhost}:${MQTT_PORT:-1883}"
+    log_rtl433_version
 fi
 
 exec python3 /app/main.py

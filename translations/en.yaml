@@ -43,18 +43,32 @@ configuration:
       Set to 0 to clear immediately.
 
   rtl_auto_band_plan:
-    name: Region / Band Plan
+    name: Auto Mode: Region / Band Plan
     description: >-
+      Used only when 'Manual Mode: Radio Configuration' is empty.
+
       The only setting needed for auto mode.
       auto = use Home Assistant country when available.
       us = force 915 MHz for Radio #2.
       eu = force 868 MHz for Radio #2.
       world = hop 868/915 for Radio #2 (best when country is unknown).
 
-  rtl_config:
-    name: Radio Configuration
+  rtl_auto_priority:
+    name: Auto Mode: First Dongle Priority
     description: >-
-      Manual mode (advanced): Define radios explicitly. If this list is non-empty, auto mode is disabled.
+      Used only when 'Manual Mode: Radio Configuration' is empty.
+
+      Controls which auto radio gets the FIRST detected SDR (handy for single-dongle setups).
+      primary = 433.92 MHz
+      secondary = region-aware high band (868/915)
+      hopper = regional hopper (often includes 315 MHz)
+
+  rtl_config:
+    name: Manual Mode: Radio Configuration
+    description: >-
+      Manual mode (advanced): Define radios explicitly.
+
+      If this list is non-empty, auto mode is disabled and Auto Mode settings are ignored.
       Click 'Add' to configure a stick.
     keys:
       name:
