@@ -8,6 +8,12 @@
 - **NEW:** `rtl_meta_protocol: true` adds `-M protocol` by default so decoded JSON includes protocol hints (kept as attributes/ignored keys by default).
 - **BUILD:** Harden `rtl_433` version strings during build to avoid `-128-NOTFOUND` style outputs in diagnostics.
 
+### Home Assistant UX
+- **NEW:** Cleaner device display names in Home Assistant (use `model + id (+ channel)`), while keeping discovery/unique IDs stable.
+
+### Throttling & statistics
+- **FIX:** Throttle flushing no longer averages totals/counters/angles (e.g., water/gas totals, wind direction). These publish **last/peak** values to keep HA long-term statistics correct.
+
 
 ## v1.2.0-rc.1 (Release Candidate 1)
 

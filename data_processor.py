@@ -10,14 +10,60 @@ DESCRIPTION:
 import threading
 import time
 import statistics
+
 import config
+from field_meta import get_field_meta
 
 
 # Numeric fields that should NOT be averaged during throttling.
-# Instead, we publish the last valid value observed during the interval.
+# Instead, we publish a last/max value based on what makes sense for HA statistics.
+#
+# Why: averaging counters/totals (e.g. water/gas totals) corrupts HA long-term stats,
+# and averaging angles (wind direction) is mathematically wrong.
 NON_AVERAGED_NUMERIC_FIELDS = {
+    # Battery OK is latched/translated downstream; never average.
     "battery_ok",
 }
+
+
+def _aggregation_mode(field: str, device_model: str | None) -> str:
+    """Return aggregation mode for a field during throttling.
+
+    Modes:
+      - "mean": arithmetic mean (default for continuous measurements)
+      - "last": last observed value in the interval
+      - "max": max observed value in the interval
+    """
+    f = str(field or "").strip()
+    f_l = f.lower()
+
+    if f in NON_AVERAGED_NUMERIC_FIELDS:
+        return "last"
+
+    # Wind direction is an angle; averaging 359 and 1 should not yield 180.
+    if f_l in {"wind_dir", "wind_dir_deg"}:
+        return "last"
+
+    # Gusts and signal quality are typically better represented by peak.
+    if "gust" in f_l:
+        return "max"
+    if f_l in {"rssi", "snr", "noise", "rssi_db", "snr_db", "noise_db"}:
+        return "max"
+
+    # Many decoders emit counters/totals; averaging can create fractional values and
+    # break monotonic expectations. Use last value.
+    if f_l in {"counter", "sequence", "strikes", "strike_count"}:
+        return "last"
+
+    # Consult field metadata (model-aware) when available.
+    meta = get_field_meta(f, device_model)
+    if meta:
+        unit, device_class, _icon, _name = meta
+        # These are published as total_increasing in mqtt_handler.
+        if device_class in {"gas", "energy", "water", "precipitation"}:
+            return "last"
+
+    return "mean"
 
 class DataProcessor:
     def __init__(self, mqtt_handler):
@@ -103,19 +149,27 @@ class DataProcessor:
                     if not values: 
                         continue
 
-                    # Calculate Average (or last known value for strings)
+                    # Aggregate values collected during the interval.
+                    # Default: mean for continuous measurements; last/max for totals/counters/angles.
                     final_val = None
                     try:
-                        if field in NON_AVERAGED_NUMERIC_FIELDS:
-                            # E.g. battery_ok: publish the last valid sample, not the mean.
+                        mode = _aggregation_mode(field, model)
+
+                        if not isinstance(values[0], (int, float)):
+                            # Strings / enums: always publish the last observed value.
                             final_val = values[-1]
-                        elif isinstance(values[0], (int, float)):
-                            final_val = round(statistics.mean(values), 2)
-                            if final_val.is_integer():
-                                final_val = int(final_val)
+                        elif mode == "last":
+                            final_val = values[-1]
+                        elif mode == "max":
+                            final_val = max(values)
                         else:
-                            final_val = values[-1]
-                    except:
+                            # mean
+                            final_val = round(statistics.mean(values), 2)
+
+                        # Avoid publishing floats for integer-like readings.
+                        if isinstance(final_val, float) and final_val.is_integer():
+                            final_val = int(final_val)
+                    except Exception:
                         final_val = values[-1]
 
                     self.mqtt_handler.send_sensor(clean_id, field, final_val, dev_name, model, is_rtl=True)
