@@ -684,11 +684,26 @@ class HomeNodeMQTT:
 
     def _publish_details_entity(self, clean_id: str, device_name: str, device_model: str, attrs: dict) -> None:
         """Publish MQTT discovery + state/attributes for the per-device Details sensor."""
+        # NOTE: Home Assistant groups entities into a device by the discovery payload's
+        # device.identifiers. These must remain stable across profiles (minimal/full)
+        # or HA will create duplicate devices.
         unique_id = f"{clean_id}_details{config.ID_SUFFIX}"
         state_topic = f"home/rtl_devices/{clean_id}/details"
         attr_topic = f"home/rtl_devices/{clean_id}/details_attr"
 
-        # Discovery
+        # Match the identifier strategy used by _publish_discovery so Details attaches
+        # to the same HA device as the other entities for this sensor.
+        device_ident = f"rtl433_{device_model}_{clean_id}"
+
+        device_registry = {
+            "identifiers": [device_ident],
+            "manufacturer": "rtl-haos",
+            "model": device_model,
+            "name": device_name,
+        }
+        if device_model != config.BRIDGE_NAME:
+            device_registry["via_device"] = "rtl433_" + config.BRIDGE_NAME + "_" + config.BRIDGE_ID
+
         payload = {
             "name": "Details",
             "state_topic": state_topic,
@@ -696,22 +711,29 @@ class HomeNodeMQTT:
             "unique_id": unique_id,
             "icon": "mdi:information-outline",
             "entity_category": "diagnostic",
-            "device": {
-                "identifiers": [clean_id],
-                "manufacturer": "rtl-haos",
-                "model": device_model,
-                "name": device_name,
-            },
+            "device": device_registry,
             "availability_topic": self.TOPIC_AVAILABILITY,
             # Keep it from expiring too aggressively; we still update last_seen in attrs.
             "expire_after": int(getattr(config, "RTL_EXPIRE_AFTER", 0) or 0) or 0,
         }
 
-        config_topic = f"homeassistant/sensor/{unique_id}/config"
-        with self.discovery_lock:
-            if config_topic not in self.discovery_published:
-                self.client.publish(config_topic, json.dumps(payload), retain=True)
-                self.discovery_published.add(config_topic)
+        # Re-publish retained config if metadata changes (e.g. identifiers).
+        sig = (
+            "sensor",
+            payload.get("icon"),
+            payload.get("name"),
+            payload.get("json_attributes_topic"),
+            tuple(payload.get("device", {}).get("identifiers", [])),
+            payload.get("device", {}).get("via_device"),
+        )
+
+        prev_sig = self._discovery_sig.get(unique_id)
+        if prev_sig != sig:
+            config_topic = f"homeassistant/sensor/{unique_id}/config"
+            self.client.publish(config_topic, json.dumps(payload), retain=True)
+            with self.discovery_lock:
+                self.discovery_published.add(unique_id)
+            self._discovery_sig[unique_id] = sig
 
         # Publish attributes and a simple state
         try:
