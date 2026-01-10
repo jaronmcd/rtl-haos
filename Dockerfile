@@ -46,6 +46,12 @@ RUN set -eux; \
 # Build and install rtl_433 with Soapy enabled
 RUN set -eux; \
     git clone --branch "${RTL433_REF}" "${RTL433_GIT_URL}" /tmp/rtl_433; \
+    cd /tmp/rtl_433; \
+    # Harden version strings in environments where tags may be missing (avoids "-128-NOTFOUND"). \
+    git fetch --tags --force || true; \
+    # rtl_433 CMake uses `git describe --tags` without --always; add --always so it never fails. \
+    sed -i 's/git_describe(GIT_VERSION "--tags" "--exclude=nightly")/git_describe(GIT_VERSION "--tags" "--exclude=nightly" "--always")/g' CMakeLists.txt || true; \
+    cd /; \
     cmake -S /tmp/rtl_433 -B /tmp/rtl_433/build \
       -DCMAKE_BUILD_TYPE=Release \
       -DCMAKE_INSTALL_PREFIX=/usr \

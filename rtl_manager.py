@@ -35,10 +35,30 @@ from datetime import datetime
 from typing import Optional
 
 import config
-from utils import clean_mac, calculate_dew_point
+from utils import clean_mac, calculate_dew_point, make_device_key, make_device_display_name
 
 # --- Process Tracking ---
 ACTIVE_PROCESSES = []
+
+# --- Legacy device-id collision detection (legacy id-only strategy) ---
+# If multiple physical devices share the same rtl_433 "id" (common across models or channels),
+# Home Assistant entities can merge/overwrite each other. We detect likely collisions and
+# emit a one-time warning suggesting device_id_strategy="model_id_channel".
+_LEGACY_ID_SEEN: dict[str, tuple[str, str]] = {}  # id -> (model, channel)
+_LEGACY_ID_WARNED: set[str] = set()
+
+def _extract_channel_for_collision(data: dict) -> str:
+    for k in ("channel", "chan", "channel_id"):
+        try:
+            v = data.get(k)
+        except Exception:
+            v = None
+        if v is None:
+            continue
+        s = str(v).strip()
+        if s:
+            return s
+    return ""
 
 
 def _format_cmd(cmd: list[str]) -> str:
@@ -223,6 +243,21 @@ def _ensure_rtl433_outputs(cmd: list[str], *, radio_label: str, global_map: dict
     # Default metadata: add '-M level' if user didn't specify any -M
     if "-M" not in opt_map:
         cmd.extend(["-M", "level"])
+
+    # Optional metadata: protocol + timestamp mode
+    # (Repeated -M flags are allowed; we just avoid duplicating common ones.)
+    m_vals = [v[0] for v in opt_map.get("-M", []) if v]
+    m_vals_l = [str(v).lower() for v in m_vals]
+
+    if getattr(config, "RTL_META_PROTOCOL", True):
+        if not any(v == "protocol" for v in m_vals_l):
+            cmd.extend(["-M", "protocol"])
+
+    time_mode = str(getattr(config, "RTL_TIME_MODE", "legacy") or "legacy").strip().lower()
+    if time_mode in ("iso", "utc"):
+        # If user already set a time:* meta, do not override.
+        if not any(v.startswith("time:") for v in m_vals_l):
+            cmd.extend(["-M", f"time:{time_mode}"])
 
     return cmd
 
@@ -896,11 +931,44 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                             )
 
                     last_error_line = None
-
                     model = data.get("model", "Unknown")
-                    raw_id = data.get("id", "Unknown")
-                    clean_id = clean_mac(raw_id)
-                    dev_name = f"{model} {clean_id}"
+
+                    # Device identity: by default, rtl-haos uses rtl_433's 'id'.
+                    # For certain sensors, 'id' can collide across different models (or channels).
+                    # device_id_strategy lets users opt in to a stronger key without breaking existing installs.
+                    raw_key = make_device_key(data)
+                    # Warn once if legacy id-only keys appear to collide across models/channels
+                    try:
+                        if str(getattr(config, 'DEVICE_ID_STRATEGY', 'legacy')).strip().lower() == 'legacy':
+                            _legacy_id = str(raw_key)
+                            _model = str(model)
+                            _chan = _extract_channel_for_collision(data)
+                            prev = _LEGACY_ID_SEEN.get(_legacy_id)
+                            if prev is None:
+                                _LEGACY_ID_SEEN[_legacy_id] = (_model, _chan)
+                            else:
+                                prev_model, prev_chan = prev
+                                # Update missing channel without warning
+                                if prev_model == _model and (not prev_chan) and _chan:
+                                    _LEGACY_ID_SEEN[_legacy_id] = (_model, _chan)
+                                else:
+                                    collision = False
+                                    if prev_model != _model:
+                                        collision = True
+                                    elif prev_chan and _chan and prev_chan != _chan:
+                                        collision = True
+                                    if collision and _legacy_id not in _LEGACY_ID_WARNED:
+                                        _LEGACY_ID_WARNED.add(_legacy_id)
+                                        print(
+                                            '[WARN] Legacy device id collision for id=%r: previously model=%r channel=%r, now model=%r channel=%r. '
+                                            'Devices may merge in Home Assistant. Consider setting device_id_strategy="model_id_channel" to avoid collisions.'
+                                            % (_legacy_id, prev_model, prev_chan, _model, _chan)
+                                        )
+                    except Exception:
+                        pass
+
+                    clean_id = clean_mac(raw_key)
+                    dev_name = make_device_display_name(data, model=model, clean_id=clean_id)
                     dev_type = data.get("type", "Untyped")
 
                     if is_blocked_device(clean_id, model, dev_type):

@@ -1,6 +1,6 @@
 name: "RTL-HAOS"
 description: "RTL-SDR to Home Assistant MQTT bridge with signal diagnostics and system monitoring"
-version: "1.2.2"
+version: "1.2.3"
 slug: rtl-haos
 url: "https://github.com/jaronmcd/rtl-haos"
 arch:
@@ -24,6 +24,16 @@ options:
   rtl_throttle_interval: 30
   debug_raw_json: false
   rtl_show_timestamps: false
+  rtl_meta_protocol: true
+  rtl_time_mode: "legacy"  # legacy|iso|utc
+
+  # Device entity IDs in Home Assistant
+  # legacy:         use rtl_433 'id' only (backwards compatible)
+  # model_id:       include model + id
+  # model_id_channel: include model + id + channel (reduces collisions)
+  # template:       use device_id_template (advanced)
+  device_id_strategy: "model_id_channel"
+  device_id_template: "m{model}i{id}c{channel}"
   verbose_transmissions: false  # Log every single MQTT publish
 
   # Advanced: pass through extra rtl_433 flags and/or a config file.
@@ -85,6 +95,11 @@ schema:
   rtl_throttle_interval: int
   debug_raw_json: bool
   rtl_show_timestamps: bool
+  rtl_meta_protocol: bool
+  rtl_time_mode: list(legacy|iso|utc)
+
+  device_id_strategy: list(legacy|model_id|model_id_channel|template)
+  device_id_template: str
   verbose_transmissions: bool
 
   # Advanced rtl_433 passthrough

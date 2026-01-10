@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.3
+
+### RTL_433 integration improvements (safe defaults)
+- **NEW (add-on fresh installs):** Default `device_id_strategy` is now `model_id_channel` to reduce device ID collisions. Existing installs keep their saved value (typically `legacy`) until changed.
+- **NEW:** One-time warning log when a likely legacy `id` collision is detected (helps users diagnose merged devices).
+- **NEW:** `rtl_meta_protocol: true` adds `-M protocol` by default so decoded JSON includes protocol hints (kept as attributes/ignored keys by default).
+- **BUILD:** Harden `rtl_433` version strings during build to avoid `-128-NOTFOUND` style outputs in diagnostics.
+
+
 ## v1.2.0-rc.1 (Release Candidate 1)
 
 ### rtl_433 passthrough (advanced tuning & full decoder control)

@@ -237,3 +237,166 @@ def choose_hopper_band_defaults(
 
     chosen = [f for f in candidates if f.strip().lower() not in u]
     return ",".join(chosen)
+
+
+# --- Device identity helpers ---
+
+def _safe_component(value, *, max_len: int = 64) -> str:
+    """Best-effort normalize a component used for device keys."""
+    try:
+        s = str(value)
+    except Exception:
+        s = ""
+    s = s.strip()
+    if not s:
+        return "na"
+    if len(s) > max_len:
+        s = s[:max_len]
+    return s
+
+
+class _FmtDefault(dict):
+    """format_map helper: unknown template tokens become 'na'."""
+    def __missing__(self, key):
+        return "na"
+
+
+def make_device_key(data: dict, *, strategy: str | None = None, template: str | None = None) -> str:
+    """Build a stable device key string from a decoded rtl_433 JSON message.
+
+    This key is later passed through clean_mac() to become the HA/MQTT device id.
+
+    Strategies:
+      - legacy: id
+      - model_id: model + id
+      - model_id_channel: model + id + channel
+      - template: Python format string using: {model},{id},{channel},{subtype},{protocol},{type}
+    """
+    if not isinstance(data, dict):
+        data = {}
+
+    # Default to config, but allow callers/tests to override.
+    if strategy is None:
+        strategy = getattr(config, "DEVICE_ID_STRATEGY", "legacy")
+    if template is None:
+        template = getattr(config, "DEVICE_ID_TEMPLATE", "m{model}i{id}c{channel}")
+
+    st = str(strategy or "legacy").strip().lower()
+
+    model = _safe_component(data.get("model"))
+    rid = _safe_component(data.get("id"))
+
+    # Common variants across decoders.
+    channel = _safe_component(
+        data.get("channel")
+        if data.get("channel") is not None
+        else data.get("chan")
+        if data.get("chan") is not None
+        else data.get("channel_id")
+    )
+    subtype = _safe_component(
+        data.get("subtype")
+        if data.get("subtype") is not None
+        else data.get("subtype_string")
+        if data.get("subtype_string") is not None
+        else data.get("type_string")
+    )
+    protocol = _safe_component(data.get("protocol") if data.get("protocol") is not None else data.get("mod"))
+    dtype = _safe_component(data.get("type"))
+
+    m = _FmtDefault(
+        {
+            "model": model,
+            "id": rid,
+            "channel": channel,
+            "subtype": subtype,
+            "protocol": protocol,
+            "type": dtype,
+        }
+    )
+
+    if st == "legacy":
+        return rid
+    if st == "model_id":
+        return f"m{model}i{rid}"
+    if st == "model_id_channel":
+        return f"m{model}i{rid}c{channel}"
+    if st == "template":
+        try:
+            return str(template).format_map(m)
+        except Exception:
+            # Fail closed to legacy id if template is malformed.
+            return rid
+
+    # Unknown strategy -> legacy
+    return rid
+
+
+def make_device_display_name(
+    data: dict,
+    *,
+    model: str,
+    clean_id: str,
+    strategy: str | None = None,
+    template: str | None = None,
+) -> str:
+    """Return a human-friendly device name for Home Assistant.
+
+    Background:
+      - clean_id is the internal, MQTT-safe device key (derived from make_device_key + clean_mac).
+      - When using stronger device_id_strategy values (e.g. model_id_channel), clean_id may
+        already embed the model, resulting in duplicated/cluttered names like:
+            "Acurite-5n1 macurite5n1i3554cc"
+
+    This helper keeps the *internal* ids stable while making the *display* name concise:
+      - "<Model> <id>" (and optionally channel)
+
+    The display name does NOT participate in entity unique_id; it is safe to change without
+    breaking existing entities.
+    """
+
+    if not isinstance(data, dict):
+        data = {}
+
+    if strategy is None:
+        strategy = getattr(config, "DEVICE_ID_STRATEGY", "legacy")
+    if template is None:
+        template = getattr(config, "DEVICE_ID_TEMPLATE", "m{model}i{id}c{channel}")
+
+    st = str(strategy or "legacy").strip().lower()
+
+    model_s = str(model or "Unknown").strip() or "Unknown"
+
+    # Raw components (for display)
+    rid = data.get("id")
+    rid_s = str(rid).strip() if rid is not None else ""
+
+    chan = None
+    for k in ("channel", "chan", "channel_id"):
+        try:
+            v = data.get(k)
+        except Exception:
+            v = None
+        if v is None:
+            continue
+        s = str(v).strip()
+        if s:
+            chan = s
+            break
+
+    # If id is missing/empty, fall back to the cleaned internal id.
+    suffix = rid_s if rid_s else str(clean_id or "").strip()
+    if not suffix:
+        suffix = "unknown"
+
+    # Only include channel in the display name when the strategy is explicitly channel-aware.
+    include_channel = False
+    if st in ("model_id_channel",):
+        include_channel = True
+    elif st == "template" and ("{channel}" in str(template)):
+        include_channel = True
+
+    if include_channel and chan and chan.lower() not in ("na", "unknown"):
+        return f"{model_s} {suffix} ch{chan}"
+
+    return f"{model_s} {suffix}"

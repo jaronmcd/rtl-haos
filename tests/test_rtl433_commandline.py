@@ -91,6 +91,7 @@ def test_rtl_loop_logs_command_line_per_radio(monkeypatch, capsys):
     assert "-s 250k" in out.lower()
     assert "-f json" in out.lower()
     assert "-m level" in out.lower()
+    assert "-m protocol" in out.lower()
 
 
 def test_rtl_loop_multi_freq_adds_hop_interval_when_needed(monkeypatch):

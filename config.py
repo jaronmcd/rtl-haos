@@ -138,6 +138,33 @@ class Settings(BaseSettings):
         description="If True, shows 'Last: HH:MM:SS'. If False, shows 'Online'.",
     )
 
+    rtl_meta_protocol: bool = Field(
+        default=True,
+        description="If True, add '-M protocol' so rtl_433 includes modulation/protocol metadata in JSON.",
+    )
+
+    # legacy: id-only (backwards compatible)
+    # model_id: model + id
+    # model_id_channel: model + id + channel
+    # template: device_id_template format string
+    device_id_strategy: str = Field(
+        default='legacy',
+        description="How RTL-HAOS composes the HA device id from rtl_433 messages.",
+    )
+
+    device_id_template: str = Field(
+        default='m{model}i{id}c{channel}',
+        description="Used when device_id_strategy='template'. Available fields: model,id,channel,subtype,protocol,type.",
+    )
+
+    # legacy: no change (keep rtl_433 default)
+    # iso: add '-M time:iso'
+    # utc: add '-M time:utc'
+    rtl_time_mode: str = Field(
+        default='legacy',
+        description="Timestamp metadata mode for rtl_433 JSON.",
+    )
+
     verbose_transmissions: bool = Field(
         default=False,
         description="If True, logs every MQTT publish. If False, only logs summaries.",
@@ -265,6 +292,11 @@ ID_SUFFIX = settings.id_suffix
 DEBUG_RAW_JSON = settings.debug_raw_json
 RTL_THROTTLE_INTERVAL = settings.rtl_throttle_interval
 RTL_SHOW_TIMESTAMPS = settings.rtl_show_timestamps
+RTL_META_PROTOCOL = settings.rtl_meta_protocol
+RTL_TIME_MODE = settings.rtl_time_mode
+DEVICE_ID_STRATEGY = settings.device_id_strategy
+DEVICE_ID_TEMPLATE = settings.device_id_template
+
 
 VERBOSE_TRANSMISSIONS = settings.verbose_transmissions
 

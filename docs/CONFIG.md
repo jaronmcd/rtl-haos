@@ -163,6 +163,44 @@ Notes:
 - The startup log prints the final `rtl_433` command line per radio (copy/paste friendly) after overrides and de-duplication.
 - You can still use the simpler `protocols:` field for a quick `-R` filter.
 
+
+### Device ID strategy (avoid ID collisions)
+
+By default, RTL-HAOS uses rtl_433's `id` field as the Home Assistant **device id**. For some protocols, that `id` can collide across different models (or reuse per-channel), which can cause **multiple physical devices to merge into one** in Home Assistant.
+
+You can opt into a stronger device key:
+**Home Assistant Add-on note:** Starting with RTL-HAOS 1.2.3, fresh installs default to `model_id_channel` in the add-on UI. Existing installs keep whatever is already saved in `/data/options.json` (typically `legacy`) until you change it.
+
+
+```yaml
+# Home Assistant add-on:
+# - Fresh installs default to "model_id_channel" (reduces collisions)
+# - Existing installs keep whatever is saved in /data/options.json (usually "legacy")
+device_id_strategy: "model_id_channel"  # default for new installs
+# device_id_strategy: "legacy"          # backwards-compatible (upgrade-safe)
+# device_id_strategy: "model_id"        # model + id
+# device_id_strategy: "template"        # advanced
+
+
+# Used when device_id_strategy: "template"
+device_id_template: "m{model}i{id}c{channel}"
+```
+
+Available template fields: `model`, `id`, `channel`, `subtype`, `protocol`, `type`.
+
+> **Important:** Changing `device_id_strategy` changes the Home Assistant device id and therefore will create **new devices/entities** (the old ones won't automatically migrate).
+
+### rtl_433 metadata options
+
+RTL-HAOS enforces `-F json` and adds some metadata flags for convenience:
+
+```yaml
+rtl_meta_protocol: true      # adds '-M protocol' (modulation/protocol hints)
+rtl_time_mode: "legacy"     # legacy|iso|utc (adds '-M time:iso' or '-M time:utc')
+```
+
+These fields are primarily used for debugging and for advanced device-id templates. RTL-HAOS still skips publishing `time`/`protocol` as standalone sensor entities by default.
+
 ### Device filtering
 
 You can restrict which decoded devices become entities using whitelist/blacklist rules:
