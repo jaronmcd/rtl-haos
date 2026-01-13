@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import os
 
-from pydantic import Field
+from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 OPTIONS_PATH = "/data/options.json"
@@ -50,6 +50,15 @@ def _load_ha_options_into_env() -> None:
 
 _load_ha_options_into_env()
 
+class WmbusMeter(BaseModel):
+    """Wireless M-Bus meter definition for wmbusmeters decryption/decoding."""
+
+    name: str | None = Field(default=None, description="Friendly name used for the Home Assistant device")
+    id: str = Field(description="Meter ID (as printed on the meter / wmbusmeters id)")
+    key: str | None = Field(default=None, description="128-bit AES key as 32 hex chars")
+    driver: str | None = Field(default=None, description="Optional wmbusmeters driver; use 'auto' to auto-detect")
+
+
 class Settings(BaseSettings):
     """Main application settings."""
 
@@ -68,6 +77,14 @@ class Settings(BaseSettings):
 
     # --- RTL-SDR / Radios ---
     rtl_config: list[dict] = Field(default_factory=list)
+
+    # --- Wireless M-Bus decryption/decoding (wmbusmeters helper) ---
+    # rtl_433 currently does not decrypt OMS/EN13757-4 encrypted payloads for many meters.
+    # If enabled, RTL-HAOS will forward Wireless-MBus telegram hex payloads to wmbusmeters
+    # (device=stdin:hex) and publish the decoded JSON output (e.g. total_m3).
+    wmbusmeters_enabled: bool = Field(default=False)
+    wmbusmeters_meters: list[WmbusMeter] = Field(default_factory=list)
+
 
 
     # --- rtl_433 passthrough (add-on + standalone) ---
@@ -259,6 +276,12 @@ RTL_THROTTLE_INTERVAL = settings.rtl_throttle_interval
 RTL_SHOW_TIMESTAMPS = settings.rtl_show_timestamps
 
 VERBOSE_TRANSMISSIONS = settings.verbose_transmissions
+
+# --- Wireless M-Bus helper (wmbusmeters) ---
+WMBUSMETERS_ENABLED = settings.wmbusmeters_enabled
+WMBUSMETERS_METERS = settings.wmbusmeters_meters
+# Where RTL-HAOS writes wmbusmeters.conf + wmbusmeters.d/* (inside add-on persistent data)
+WMBUSMETERS_CONFIG_DIR = os.environ.get("WMBUSMETERS_CONFIG_DIR", "/data/wmbusmeters")
 
 # Battery behavior
 BATTERY_OK_CLEAR_AFTER = settings.battery_ok_clear_after

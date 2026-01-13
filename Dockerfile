@@ -14,6 +14,7 @@
 # STAGE 1: Builder - install Python deps with compilation support
 # ==========================================================================
 ARG BUILD_FROM=alpine:3.21
+ARG WMBUSMETERS_VERSION=1.19.0
 FROM ${BUILD_FROM} as builder
 
 # Build deps
@@ -38,6 +39,34 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # ==========================================================================
+# STAGE 1b: Builder - compile wmbusmeters (optional helper)
+# ==========================================================================
+FROM ${BUILD_FROM} as wmbus_builder
+ARG WMBUSMETERS_VERSION
+
+RUN apk add --no-cache \
+    git \
+    bash \
+    make \
+    g++ \
+    libc-dev \
+    libstdc++ \
+    pkgconfig \
+    autoconf \
+    automake \
+    libtool \
+    openssl-dev \
+    libusb-dev
+
+# Build wmbusmeters from source (pinned to a tag for reproducible builds)
+WORKDIR /tmp
+RUN git clone --depth 1 --branch v${WMBUSMETERS_VERSION} https://github.com/wmbusmeters/wmbusmeters.git /tmp/wmbusmeters
+WORKDIR /tmp/wmbusmeters
+RUN ./configure \
+    && make -j"$(nproc)" \
+    && make DESTDIR=/wmbus_install install
+
+# ==========================================================================
 # STAGE 2: Runtime
 # ==========================================================================
 FROM ${BUILD_FROM}
@@ -49,12 +78,15 @@ RUN set -eu; \
     if ! command -v python3 >/dev/null 2>&1; then \
         apk add --no-cache python3; \
     fi; \
-    apk add --no-cache rtl-sdr rtl_433 libusb
+    apk add --no-cache rtl-sdr rtl_433 mosquitto-clients libusb libstdc++ openssl
 
 WORKDIR /app
 
 # Copy the virtual environment from builder
 COPY --from=builder /app/.venv /app/.venv
+
+# Optional helper: wmbusmeters (AES decryption for Wireless M-Bus)
+COPY --from=wmbus_builder /wmbus_install/usr/bin/wmbusmeters /usr/bin/wmbusmeters
 
 # Copy application code
 COPY . ./

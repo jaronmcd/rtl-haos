@@ -18,6 +18,7 @@ from typing import Optional
 
 import config
 from utils import clean_mac, calculate_dew_point
+from wmbusmeters_helper import WmbusmetersHelper
 
 # --- Process Tracking ---
 ACTIVE_PROCESSES = []
@@ -714,6 +715,55 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
 
     freq_display = ",".join(frequencies) if frequencies else "default"
 
+    # Optional Wireless M-Bus decryption/decoding via wmbusmeters
+    wmbus_helper = None
+    if getattr(config, "WMBUSMETERS_ENABLED", False) and getattr(config, "WMBUSMETERS_METERS", None):
+        try:
+            def _on_wmbusmeters_json(obj: dict) -> None:
+                """Dispatch decoded wmbusmeters JSON into the normal RTL-HAOS MQTT pipeline."""
+                try:
+                    meter_id = str(obj.get("id") or "").strip()
+                    if not meter_id:
+                        return
+                    clean_id = clean_mac(meter_id)
+                    device_model = "Wireless-MBus"
+                    dev_name = str(obj.get("name") or f"{device_model} {clean_id}")
+                    dev_type = str(obj.get("meter") or obj.get("media") or "wmbus")
+
+                    # Reuse the same allow/deny filters used for rtl_433 packets
+                    if is_blocked_device(clean_id, device_model, dev_type):
+                        return
+                    whitelist = getattr(config, "DEVICE_WHITELIST", [])
+                    if whitelist and not any(fnmatch.fnmatch(clean_id, p) for p in whitelist):
+                        return
+
+                    # Publish fields (skip some boilerplate keys)
+                    skip = {"id", "name", "timestamp", "collector"}
+                    for k, v in obj.items():
+                        if k in skip or v is None:
+                            continue
+                        data_processor.dispatch_reading(
+                            clean_id, k, v, dev_name, device_model, radio_name=radio_name, radio_freq=freq_display
+                        )
+                except Exception as e:
+                    print(f"[WMBUS] Error dispatching wmbusmeters JSON: {e}")
+
+            wmbus_helper = WmbusmetersHelper(
+                meters=list(getattr(config, "WMBUSMETERS_METERS", []) or []),
+                config_dir=str(getattr(config, "WMBUSMETERS_CONFIG_DIR", "/data/wmbusmeters")),
+                on_decoded_json=_on_wmbusmeters_json,
+                log_prefix=f"[WMBUS:{radio_name}]",
+            )
+            wmbus_helper.start()
+            meter_count = len(getattr(config, 'WMBUSMETERS_METERS', []) or [])
+            print(f"[WMBUS] Enabled wmbusmeters helper (meters={meter_count})")
+        except FileNotFoundError:
+            print("[WMBUS] wmbusmeters binary not found in container; disabling decryption support.")
+            wmbus_helper = None
+        except Exception as e:
+            print(f"[WMBUS] Failed to start wmbusmeters helper: {e}")
+            wmbus_helper = None
+
     print(f"[RTL] Starting {radio_name} on {freq_display} (Rate: {rate})...")
     # Show the exact command line we will run (copy/paste friendly)
     print(f"[STARTUP] rtl_433 cmd [{radio_name} id={radio_id}]: {_format_cmd(cmd)}")
@@ -816,6 +866,15 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
 
                     whitelist = getattr(config, "DEVICE_WHITELIST", [])
                     if whitelist and not any(fnmatch.fnmatch(clean_id, p) for p in whitelist):
+                        continue
+
+                    # Wireless M-Bus decryption path: forward the raw telegram (hex) to wmbusmeters
+                    # and skip publishing the (often misleading) rtl_433 decoded fields.
+                    if wmbus_helper is not None and model == "Wireless-MBus" and data.get("data"):
+                        try:
+                            wmbus_helper.feed(str(data.get("data")))
+                        except Exception as e:
+                            print(f"[WMBUS] Failed to forward telegram to wmbusmeters: {e}")
                         continue
 
                     # Neptune R900 Water Meter

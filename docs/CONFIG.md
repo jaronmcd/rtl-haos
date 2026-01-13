@@ -71,6 +71,29 @@ rtl_config:
 ```
 
 
+
+
+### Wireless M-Bus decryption (OMS/EN13757-4 AES-128)
+
+Some Wireless M-Bus meters (especially OMS v4 C-mode devices) encrypt the application payload. In that case, rtl_433 may still detect the meter and produce a JSON line with a `data` field, but totals (e.g., cumulative volume) will be missing or nonsense.
+
+RTL-HAOS can optionally invoke **wmbusmeters** as a decode helper. RTL-HAOS forwards the raw telegram `data` hex to wmbusmeters, which performs AES-128 decryption and produces structured JSON fields such as `total_m3`.
+
+Enable the helper and define one or more meters:
+
+```yaml
+wmbusmeters_enabled: true
+wmbusmeters_meters:
+  - name: equascan_water
+    id: "01249398"   # your meter ID (often 8 digits; pad with leading zeros if needed)
+    key: "00020108010201660368056502670469"  # AES-128 key (32 hex chars)
+    driver: auto     # optional; use a specific driver if you know it
+```
+
+Notes:
+- Keys should be treated as sensitive. RTL-HAOS does not log keys.
+- If `wmbusmeters_enabled` is true, RTL-HAOS will forward `model: Wireless-MBus` telegrams to wmbusmeters and will not publish rtl_433's raw/decrypted fields for those telegrams.
+- HA discovery: `total_m3` is published with `device_class: water` and `state_class: total_increasing` when present.
 ### Advanced: full rtl_433 passthrough
 
 RTL-HAOS can pass **arbitrary rtl_433 flags** and/or a full **rtl_433 config file** (same format as `rtl_433 -c`: one argument per line). This is the most flexible way to tune reception (gain/ppm/AGC), constrain decoders, or use tuner settings.

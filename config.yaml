@@ -39,6 +39,10 @@ options:
   # --- Battery alert behavior (battery_ok -> Battery Low) ---
   # 0 disables latching and clears low on the next OK
   battery_ok_clear_after: 300
+
+  # --- Wireless M-Bus decryption (optional) ---
+  wmbusmeters_enabled: false
+  wmbusmeters_meters: []
   
   # --- DEFAULTS (Add-on UI) ---
   # Global defaults are NOT exposed in the add-on UI.
@@ -91,6 +95,20 @@ schema:
   rtl_auto_band_plan: list(auto|us|eu|world)
 
   battery_ok_clear_after: int
+
+  # --- Wireless M-Bus decryption (optional) ---
+  # Many OMS/EN13757-4 meters encrypt payloads (AES-128). rtl_433
+  # often detects the meter but cannot decode totals without decryption.
+  # When enabled, RTL-HAOS runs wmbusmeters in decode-only mode (stdin:hex)
+  # and forwards Wireless-MBus telegram hex from rtl_433 to wmbusmeters,
+  # publishing the decrypted/decoded JSON (e.g. total_m3).
+  wmbusmeters_enabled: bool?
+  wmbusmeters_meters:
+    - name: str?
+      id: str
+      key: password?
+      driver: str?
+
 
   # --- DELETED GLOBAL SCHEMA ---
   # The UI will no longer show the 3 text boxes for defaults.
