@@ -1,17 +1,32 @@
 # Dual-purpose Dockerfile: Home Assistant Add-on + Standalone Docker
+#
+# Key idea:
+# - Home Assistant add-on builds pass BUILD_FROM (via build.yaml) which points to an arch-specific
+#   Home Assistant base image that includes bashio + s6-overlay.
+# - Standalone Docker builds (e.g., docker compose on Debian/RPi) should work out-of-the-box on
+#   amd64/arm64/armv7, so the default BUILD_FROM is a multi-arch Alpine base.
+#
+# The container entry command is /entrypoint.sh, which automatically switches between:
+#   - /run.sh            (Home Assistant add-on mode, requires with-contenv + bashio)
+#   - /run-standalone.sh (plain Docker mode, no bashio required)
 
-# ============================================================================
-# STAGE 1: Builder - Install Python dependencies with compilation support
-# ============================================================================
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.21
+# ==========================================================================
+# STAGE 1: Builder - install Python deps with compilation support
+# ==========================================================================
+ARG BUILD_FROM=alpine:3.21
 FROM ${BUILD_FROM} as builder
 
-# Install build dependencies needed for compiling Python packages
+# Build deps
+# - python3/python3-dev: needed for standalone builds; HA base-python already includes Python,
+#   but may not include headers.
+#
+# NOTE: On HA base images, python3 may already exist; installing python3-dev is still fine.
 RUN apk add --no-cache \
+    python3 \
+    python3-dev \
     gcc \
     musl-dev \
-    linux-headers \
-    python3-dev
+    linux-headers
 
 # Copy uv from official image
 COPY --from=ghcr.io/astral-sh/uv:0.9.16 /uv /uvx /bin/
@@ -22,16 +37,19 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
-# ============================================================================
-# STAGE 2: Runtime - Slim final image
-# ============================================================================
+# ==========================================================================
+# STAGE 2: Runtime
+# ==========================================================================
 FROM ${BUILD_FROM}
 
-# Install only runtime dependencies
-RUN apk add --no-cache \
-    rtl-sdr \
-    rtl_433 \
-    libusb
+# Runtime deps
+# - python3: required for standalone base; HA base already includes Python
+# - rtl-sdr / rtl_433 / libusb: SDR + rtl_433
+RUN set -eu; \
+    if ! command -v python3 >/dev/null 2>&1; then \
+        apk add --no-cache python3; \
+    fi; \
+    apk add --no-cache rtl-sdr rtl_433 libusb
 
 WORKDIR /app
 
@@ -40,7 +58,12 @@ COPY --from=builder /app/.venv /app/.venv
 
 # Copy application code
 COPY . ./
-COPY run.sh /
+
+# Add runtime scripts
+COPY run.sh /run.sh
+COPY run-standalone.sh /run-standalone.sh
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod a+x /run.sh /run-standalone.sh /entrypoint.sh
 
 # Optional internal build metadata (SemVer build metadata). Kept out of config.yaml.
 #
@@ -80,11 +103,9 @@ RUN set -eu; \
     fi; \
     rm -rf /app/.git
 
-RUN chmod a+x /run.sh
-
 # Use the virtual environment
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONUNBUFFERED=1
 ENV TERM=xterm-256color
 
-CMD [ "/run.sh" ]
+CMD [ "/entrypoint.sh" ]

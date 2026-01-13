@@ -581,30 +581,62 @@ To keep the bridge running 24/7 using the native installation method, use `syste
     ```
 
 ---
-
-
 ## ❓ Troubleshooting
+
+- **Docker/Compose build fails with:** `exec /bin/ash: exec format error`
+  - **Cause:** CPU architecture mismatch (most commonly an `amd64` base image being built/run on Raspberry Pi `arm64/armv7`). This is not an `apk add` dependency problem.
+  - **Quick checks:**
+    ```bash
+    uname -m
+    docker info --format 'arch={{.Architecture}} os={{.OperatingSystem}}'
+    env | grep -E '^DOCKER_DEFAULT_PLATFORM=' || true
+    docker compose config | grep -nE '^\s*platform:' || true
+    ```
+  - **Fix (recommended):** do not force `linux/amd64`, then rebuild cleanly:
+    ```bash
+    unset DOCKER_DEFAULT_PLATFORM || true
+    docker compose build --no-cache --pull
+    docker compose up
+    ```
+  - **If you must pin the platform explicitly:**
+    - Raspberry Pi OS 64-bit (Pi 3/4/5): `linux/arm64`
+    - Raspberry Pi OS 32-bit: `linux/arm/v7`
+    Example:
+    ```yaml
+    services:
+      rtl-haos:
+        platform: linux/arm64
+    ```
+  - **Note on emulation (QEMU/binfmt):** you *can* run `amd64` on ARM with emulation, but it is slower and not recommended for SDR workloads. Prefer native ARM images.
+
 - **"Service Fails to Start" (Exit Code Error)**
-  - Check your username in the service file. If your terminal says user@hostname, your User= line must be user, not pi
-  - Verify paths. Run ls /home/YOUR_USER/rtl-haos to make sure the folder exists.
-  - Check the logs: journalctl -u rtl-bridge.service -b
-- **"No Device Found" in Logs:**
+  - Check your username in the service file. If your terminal says `user@hostname`, your `User=` line must be `user`, not `pi`.
+  - Verify paths. Run `ls /home/YOUR_USER/rtl-haos` to make sure the folder exists.
+  - Check the logs: `journalctl -u rtl-bridge.service -b`
+
+- **"No Device Found" in Logs**
   - The script cannot see your USB stick.
   - Run `lsusb` to verify it is plugged in.
-  - Ensure you are not running another instance of `rtl_433` in the background.
-  - The ExecStartPre=/bin/sleep 10 line in the service file usually fixes this by waiting for the USB to wake up on reboot.
-  - Hard reset your Hardware or Virtual Machine.
-- **"Kernel driver is active" Error:**
-  - Linux loaded the default TV tuner driver. You need to blacklist it.
-  - Run: `echo "blacklist dvb_usb_rtl28xxu" | sudo tee /etc/modprobe.d/blacklist-rtl.conf` and reboot.
-- **Sensors updates are slow:**
+  - Ensure you are not running another instance of `rtl_433` in the background (USB busy).
+  - If running via `systemd`, the `ExecStartPre=/bin/sleep 10` line in the service file usually fixes this by waiting for the USB to wake up on reboot.
+  - If running via Docker/Compose, ensure USB passthrough is enabled:
+    - Compose: `privileged: true` and `/dev/bus/usb:/dev/bus/usb`
+    - Or docker CLI: `--privileged --device /dev/bus/usb:/dev/bus/usb`
+  - Hard reset your hardware or virtual machine (USB can wedge).
+
+- **"Kernel driver is active" Error**
+  - Linux loaded the default TV tuner driver. You need to blacklist it:
+    ```bash
+    echo "blacklist dvb_usb_rtl28xxu" | sudo tee /etc/modprobe.d/blacklist-rtl.conf
+    sudo reboot
+    ```
+
+- **Sensors updates are slow**
   - Check `RTL_THROTTLE_INTERVAL`. Default is 30 seconds. Set to 0 for instant updates (not recommended for noisy environments).
-- **Ghost Devices won't delete:**
+
+- **Ghost Devices won't delete**
   - Use **Delete Entities (Press 5x)** (see **Maintenance: Cleanup & Radio Restart** above).
   - If that still fails, use an MQTT explorer and delete the *retained* Home Assistant discovery topics created by RTL-HAOS:
     - `homeassistant/sensor/*/config`
     - `homeassistant/button/*/config`
     Look for discovery payloads where `device.manufacturer` is `"rtl-haos"`.
-## 🧪 Development & Testing
-
-See **`docs/DEVELOPMENT.md`**.
