@@ -139,14 +139,24 @@ Notes:
 You can restrict which decoded devices become entities using whitelist/blacklist rules:
 
 ```yaml
-rtl_whitelist:
+device_whitelist:
   - "Acurite-5n1*"
   - "AmbientWeather*"
-rtl_blacklist:
+device_blacklist:
   - "EcoWitt-WH40*"
 ```
 
-(Exact matching behavior is defined in code; see `config.yaml` for the option names.)
+Pattern syntax:
+- Patterns use shell-style glob matching (fnmatch): `*`, `?`, and `[]` character classes.
+- Patterns are matched against the decoded device's **ID**, **model**, and **type** fields.
+- Matching is case-insensitive.
+- Regular expressions (e.g., `^...$`) are not supported.
+
+Examples:
+- Exact model: `Cotech-367959`
+- Prefix model: `Cotech*`
+- Exact ID: `101`
+
 
 ### Multiple RTL-SDR dongles with duplicate serials
 

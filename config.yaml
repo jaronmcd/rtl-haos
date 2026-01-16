@@ -58,10 +58,16 @@ options:
   rtl_auto_band_plan: "auto"
 
   # --- Device Filtering ---
-  # Define specific Devices or ID Numbers to allow or disallow
-  # Example:
-  # - "Acurite 5n1*"
-  # - "*8675*"
+  # Define device patterns to allow or disallow.
+  # Patterns use shell-style glob matching (Python fnmatch): *, ?, and [] character classes.
+  # Patterns are matched against the decoded device's ID, model, and type fields.
+  # Matching is case-insensitive.
+  # Regular expressions (e.g. ^...$) are not supported.
+  # Examples:
+  # - "Cotech-367959"   # exact model
+  # - "Cotech*"        # model prefix
+  # - "101"            # exact ID
+  # - "*8675*"         # substring match (model or ID)
   device_blacklist:
     - "SimpliSafe*"
     - "EezTire*"

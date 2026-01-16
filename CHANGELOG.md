@@ -25,6 +25,10 @@
 - **NEW:** Startup logs print the full `rtl_433` command line per radio (`rtl_433 cmd ...`) for copy/paste troubleshooting.
 - **CHANGED:** Global passthrough (`RTL_433_ARGS` / `rtl_433_args`) now acts as a **global override**: any option present wins over per-radio settings/auto defaults, with a **WARNING per radio** and de-duplicated flags.
 
+### Filtering
+- **FIX:** `device_whitelist` now matches patterns against the decoded device's **ID**, **model**, and **type** (previously it only matched the cleaned ID), restoring documented model-based whitelisting behavior.
+- **DOCS:** Clarify whitelist/blacklist glob syntax (no regex) and add examples for model- and ID-based rules.
+
 ### Tests
 - **NEW:** Unit tests for version handling and command building.
 - **NEW:** Hardware-only smoke test for passthrough flags (skipped unless `RUN_HARDWARE_TESTS=1`).

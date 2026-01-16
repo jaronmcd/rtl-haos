@@ -253,6 +253,18 @@ DEVICE_BLACKLIST='["SimpliSafe*", "EezTire*"]'
 # Device filtering (allow only specific devices - optional)
 DEVICE_WHITELIST='["Acurite-5n1*", "AmbientWeather*"]'
 ```
+
+Pattern syntax (for `DEVICE_WHITELIST` / `DEVICE_BLACKLIST`):
+- Patterns use shell-style glob matching (Python `fnmatch`): `*`, `?`, and `[]` character classes.
+- Patterns are matched against the decoded device's **ID**, **model**, and **type** fields.
+- Matching is case-insensitive.
+- Regular expressions (e.g., `^...$`) are not supported.
+
+Examples:
+- Whitelist by exact model: `DEVICE_WHITELIST='["Cotech-367959"]'`
+- Whitelist by prefix: `DEVICE_WHITELIST='["Cotech*"]'`
+- Whitelist by ID: `DEVICE_WHITELIST='["101"]'`
+
 **Misc Configuration:**
 ```bash
 # Toggle "Last: HH:MM:SS" vs "Online" in status
@@ -338,6 +350,16 @@ device_blacklist: # Block specific device patterns
   - "SimpliSafe*"
   - "EezTire*"
 device_whitelist: [] # If set, only allow these patterns
+
+# Pattern syntax
+# - Patterns use shell-style glob matching (fnmatch): *, ?, and [] character classes.
+# - Patterns are matched against the decoded device's ID, model, and type fields.
+# - Matching is case-insensitive.
+# - Regular expressions (e.g., ^...$) are not supported.
+# Examples:
+# - "Cotech-367959"  # exact model
+# - "Cotech*"       # model prefix
+# - "101"           # exact ID
 ```
 
 #### 4. Start the Add-on
