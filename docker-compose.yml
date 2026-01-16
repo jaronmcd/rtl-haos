@@ -3,9 +3,10 @@ services:
     build: .
     container_name: rtl-haos
     restart: unless-stopped
-    privileged: true
-    devices:
-      - /dev/bus/usb:/dev/bus/usb
+    # For USB mode: uncomment the next two lines
+    # privileged: true
+    # devices:
+    #   - /dev/bus/usb:/dev/bus/usb
     env_file:
       - .env
     # Or specify environment variables directly:
@@ -13,3 +14,5 @@ services:
     #   - MQTT_HOST=192.168.1.123
     #   - MQTT_USER=mqtt_user
     #   - MQTT_PASS=mqtt_password
+    #   # TCP mode example:
+    #   - RTL_CONFIG=[{"name": "Remote SDR", "tcp_host": "192.168.1.10", "tcp_port": 1234, "freq": "433.92M"}]

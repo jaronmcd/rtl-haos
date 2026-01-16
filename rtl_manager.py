@@ -307,14 +307,26 @@ def build_rtl_433_command(radio_config: dict) -> list[str]:
         cmd.extend(["-c", cfg_file])
 
     # Device selection (-d) defaults.
-    dev = radio_config.get("device")
-    dev_index = radio_config.get("index")
-    if dev is not None and str(dev).strip():
-        cmd.extend(["-d", str(dev).strip()])
-    elif dev_index is not None:
-        cmd.extend(["-d", str(dev_index)])
+    # Priority: tcp_host/tcp_port (TCP mode) -> device -> index -> radio_id (USB mode)
+    tcp_host = radio_config.get("tcp_host")
+    tcp_port = radio_config.get("tcp_port")
+
+    if tcp_host and str(tcp_host).strip():
+        # TCP mode: rtl_433 -d rtl_tcp:host:port
+        tcp_host = str(tcp_host).strip()
+        tcp_port = int(tcp_port) if tcp_port else 1234
+        tcp_device = f"rtl_tcp:{tcp_host}:{tcp_port}"
+        cmd.extend(["-d", tcp_device])
     else:
-        cmd.extend(["-d", str(radio_id)])
+        # USB mode (existing logic)
+        dev = radio_config.get("device")
+        dev_index = radio_config.get("index")
+        if dev is not None and str(dev).strip():
+            cmd.extend(["-d", str(dev).strip()])
+        elif dev_index is not None:
+            cmd.extend(["-d", str(dev_index)])
+        else:
+            cmd.extend(["-d", str(radio_id)])
 
     # Frequency (-f)
     freq_str = str(radio_config.get("freq", getattr(config, "RTL_DEFAULT_FREQ", "433.92M")))

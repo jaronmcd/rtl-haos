@@ -67,6 +67,9 @@ class Settings(BaseSettings):
     mqtt_keepalive: int = Field(default=0)
 
     # --- RTL-SDR / Radios ---
+    # Each radio config supports:
+    #   - USB mode: device/id/index (e.g., {"id": "101", "freq": "433.92M"})
+    #   - TCP mode: tcp_host/tcp_port (e.g., {"tcp_host": "192.168.1.10", "tcp_port": 1234, "freq": "433.92M"})
     rtl_config: list[dict] = Field(default_factory=list)
 
 

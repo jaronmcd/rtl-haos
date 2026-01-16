@@ -238,9 +238,24 @@ RTL_HAOS_BUILD='dev.local'
 For multiple RTL-SDR dongles on different frequencies:
 
 ```bash
-# Multiple radios 
+# Multiple USB radios
 RTL_CONFIG='[{"name": "Weather Radio", "id": "101", "freq": "433.92M", "rate": "250k"}, {"name": "Utility Meter", "id": "102", "freq": "915M", "rate": "250k"}]'
 ```
+
+**TCP Source Setup (rtl_tcp):**
+
+You can also connect to a remote SDR source using `rtl_tcp` instead of a local USB dongle:
+
+```bash
+# TCP source (e.g., from Ultrafeeder or another rtl_tcp server)
+RTL_CONFIG='[{"name": "Remote SDR", "tcp_host": "192.168.1.10", "tcp_port": 1234, "freq": "433.92M", "rate": "250k"}]'
+```
+
+When using TCP mode:
+- No USB device is required (`--privileged` and `--device` flags are not needed)
+- The `tcp_host` and `tcp_port` parameters specify the remote rtl_tcp server
+- Default port is 1234 if `tcp_port` is not specified
+- You can mix USB and TCP sources in the same configuration
 
 **Device Filtering:**
 
@@ -365,7 +380,7 @@ docker compose up -d
 # Build the image
 docker build -t rtl-haos .
 
-# Run the container
+# Run the container (USB mode)
 docker run -d \
   --name rtl-haos \
   --restart unless-stopped \
@@ -373,9 +388,16 @@ docker run -d \
   --device /dev/bus/usb:/dev/bus/usb \
   --env-file .env \
   rtl-haos
+
+# Run the container (TCP mode - no USB device needed)
+docker run -d \
+  --name rtl-haos \
+  --restart unless-stopped \
+  --env-file .env \
+  rtl-haos
 ```
 
-> **Note:** The `--privileged` and `--device` flags are required for USB access to the RTL-SDR dongle.
+> **Note:** The `--privileged` and `--device` flags are required for USB access to the RTL-SDR dongle. When using TCP mode (rtl_tcp), these flags are not needed.
 
 #### View logs
 
