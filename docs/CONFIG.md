@@ -2,161 +2,169 @@
 
 This page summarizes the main configuration entry points for RTL-HAOS.
 
-- **Home Assistant Add-on users:** configure via **Settings → Add-ons → RTL-HAOS → Configuration**.
-- **Developers / standalone runs:** see `.env.example` for environment variable configuration.
-- **Full schema:** see `config.yaml` (authoritative list of all options and defaults).
+- **Home Assistant Add-on users:** configure via **Settings -> Add-ons -> RTL-HAOS -> Configuration**.
+- **Docker / standalone / development:** configure via `.env` (see `.env.example`).
+- **Authoritative list of add-on options + defaults:** `config.yaml`.
 
 ---
 
 ## Home Assistant Add-on
 
-In Home Assistant: **Settings → Add-ons → RTL-HAOS → Configuration**.
+Open **Settings -> Add-ons -> RTL-HAOS -> Configuration** and edit the YAML.
 
-### Common options
+### Minimal configuration
 
 ```yaml
 # MQTT
+# - `mqtt_host` defaults to `core-mosquitto`.
+# - If you run an external broker, set its IP/hostname.
 mqtt_host: core-mosquitto
 mqtt_port: 1883
 mqtt_user: ""
 mqtt_pass: ""
-mqtt_topic_prefix: rtl_433
 
-# Logging
-log_level: INFO
+# Bridge identity (keeps your Home Assistant device stable)
+bridge_id: "42"
+bridge_name: "rtl-haos-bridge"
 ```
 
-### Utility meters (gas + electric)
-
-RTL-HAOS supports Itron-style utility meters (e.g., `ERT-SCM`, `SCMplus`) and publishes Home Assistant MQTT discovery entities for totals.
-
-**Electric meters**
-- Published as **Energy (kWh)**.
-- Values are scaled from **hundredths of kWh → kWh** (÷100) when the meter is identified as electric.
-
-**Gas meters**
-- Published as **Gas (ft³)** by default (**raw** totals).
-- Optional: publish in **CCF** (hundred cubic feet) by setting:
+### Common options
 
 ```yaml
-gas_unit: ft3   # default
-# gas_unit: ccf # optional (publishes totals in CCF by dividing ft³ by 100)
+# Publishing behavior
+rtl_expire_after: 600         # seconds before an entity is marked unavailable
+rtl_throttle_interval: 30     # seconds to buffer/average updates (0 = realtime)
+rtl_show_timestamps: false    # if true, show last-seen timestamp in entity state
+verbose_transmissions: false  # if true, log every MQTT publish
+
+debug_raw_json: false         # if true, print raw rtl_433 JSON lines
+
+# Utility meters (gas)
+gas_unit: ft3                 # ft3 (default) or ccf
+
+# Battery alert behavior (battery_ok -> Battery Low)
+battery_ok_clear_after: 300   # seconds battery_ok must be OK before clearing a low alert (0 disables)
 ```
 
-> **Upgrade note (v1.1.13 → v1.1.14):** gas totals may appear to increase by ~100× compared to v1.1.13 if you were previously seeing CCF-like values while labeled as ft³. This is expected when switching to raw ft³. See `CHANGELOG.md` → v1.1.14 → “Migration from v1.1.13”.
+### Auto mode vs manual rtl_config
 
-### Auto-config vs manual `rtl_config`
-
-Most users can leave RTL in auto mode:
+- If `rtl_config` is empty (`rtl_config: []`), RTL-HAOS runs in **auto mode** and will start 1-3 radios depending on how many RTL-SDR dongles are detected.
+- The only add-on UI knob that affects auto mode is `rtl_auto_band_plan`:
 
 ```yaml
-rtl_auto: true
-rtl_auto_frequency: 915000000
-rtl_auto_sample_rate: 1024000
-rtl_auto_gain: 0
+rtl_auto_band_plan: auto  # one of: auto | us | eu | world
 ```
 
-If you want full control (multiple radios, fixed protocols, hopping, etc.), set `rtl_config` explicitly. The full shape and defaults are defined in `config.yaml`.
+If you want full control (pin a specific stick, run multiple fixed radios, hop frequencies, or use rtl_tcp), define `rtl_config`.
 
-Example (manual radio with protocol filter):
+### Manual rtl_config examples
+
+#### USB RTL-SDR (pinned by USB serial)
 
 ```yaml
 rtl_config:
-  - name: equascan
+  - name: "Weather"
+    id: "101"        # RTL-SDR USB serial
+    freq: 433.92M
+    rate: 250k
+```
+
+#### Multi-frequency hopping
+
+```yaml
+rtl_config:
+  - name: "High band hopper"
+    id: "102"
+    freq: "868M,915M"
+    hop_interval: 15
+    rate: 1024k
+```
+
+#### rtl_tcp (network SDR)
+
+If your RTL-SDR is plugged into another machine (for example, your desktop PC), you can run `rtl_tcp` there and have RTL-HAOS connect over the network.
+
+You can use either:
+- `device: "rtl_tcp:HOST:PORT"` (works even without `tcp_host/tcp_port` fields), or
+- the explicit `tcp_host` and `tcp_port` fields.
+
+```yaml
+rtl_config:
+  - name: "Remote SDR"
+    freq: 433.92M
+    rate: 250k
+    device: "rtl_tcp:192.168.1.10:1234"
+    # tcp_host: "192.168.1.10"
+    # tcp_port: 1234
+```
+
+### Optional protocol filter (-R)
+
+You can constrain rtl_433 decoders per radio:
+
+```yaml
+rtl_config:
+  - name: "Utility"
     freq: 868.95M
     rate: 250k
-    # Optional: limit rtl_433 decoders via -R
-    # Comma- or space-separated ints, e.g. "104,105".
     protocols: "104,105"
 ```
 
+### Advanced rtl_433 passthrough
 
-### Advanced: full rtl_433 passthrough
-
-RTL-HAOS can pass **arbitrary rtl_433 flags** and/or a full **rtl_433 config file** (same format as `rtl_433 -c`: one argument per line). This is the most flexible way to tune reception (gain/ppm/AGC), constrain decoders, or use tuner settings.
-
-**Global passthrough & overrides (applies to all radios):**
-
-`rtl_433_args` is applied to every `rtl_433` invocation. **Any option you set here overrides the same option coming from per-radio settings or auto defaults** (e.g., `-s` sample rate, `-g` gain, `-p` ppm, `-R` decoders, etc.).
-
-When a global override replaces a per-radio/default value, RTL-HAOS logs a **WARNING per radio** so it’s obvious in the Home Assistant add-on logs (yellow). This is intentional: it makes it easy to configure multi-radio once, then temporarily apply a common tuning parameter to all radios for testing.
-
+RTL-HAOS can pass arbitrary `rtl_433` flags and/or a full `rtl_433` config file.
 
 ```yaml
-# Extra flags appended to every rtl_433 invocation
-rtl_433_args: '-g 40 -p 0 -t "direct_samp=1"'
+# Global (applies to all radios)
+rtl_433_args: '-g 40 -p 0'
+rtl_433_config_path: "rtl_433.conf"     # under /share when running as an add-on
+# rtl_433_config_inline: |
+#   -g 40
+#   -p 0
 
-# Optional: provide an rtl_433 config file via -c
-# In the HA add-on, relative paths resolve under /share (e.g. /share/rtl_433.conf).
-rtl_433_config_path: "rtl_433.conf"
-
-# Or inline config content (RTL-HAOS writes it to /tmp and passes -c /tmp/...)
-rtl_433_config_inline: |
-  -g 40
-  -p 0
-  -R 104
-  -R 105
-```
-
-**Global override example (force one sample rate for all radios):**
-
-```yaml
-rtl_433_args: "-s 2000k"
-```
-
-This will override the per-radio/auto `rate:` values for every radio, and you’ll see a WARNING per radio showing what was overridden.
-
-**Per-radio passthrough (adds radio-specific flags):**
-
-Per-radio fields (`args`, `device`, `config_path`, `config_inline`, `bin`) let you add radio-specific tuning. If a per-radio flag conflicts with an option present in `rtl_433_args`, **the global option wins** and RTL-HAOS will emit a WARNING indicating the override.
-
-```yaml
+# Per radio
 rtl_config:
-  - name: utility
+  - name: "Utility"
     freq: 868.95M
     rate: 250k
-
-    # Optional: override which RTL-SDR this radio uses (-d accepts index/serial/Soapy selectors)
-    device: ":00000001"
-
-    # Extra flags for this radio only
-    args: '-g 25 -t "biastee=1"'
-
-    # Optional: per-radio config file or inline config (-c). Takes precedence over rtl_433_config_* globals; a -c in rtl_433_args will override and warn.
-    config_path: "utility.conf"
+    args: '-g 25'
+    # device: ":00000001"               # explicit USB selector
+    # config_path: "utility.conf"
     # config_inline: |
-    #   -g 25
     #   -R 104
 ```
 
 Notes:
-- RTL-HAOS requires **JSON output** to function; `-F json` is enforced. If you provide your own `-F`, RTL-HAOS will keep JSON enabled.
-- The startup log prints the final `rtl_433` command line per radio (copy/paste friendly) after overrides and de-duplication.
-- You can still use the simpler `protocols:` field for a quick `-R` filter.
+- RTL-HAOS enforces JSON output (`-F json`) so it can parse data.
+- If a setting is specified both per-radio and in `rtl_433_args`, the global value takes precedence and RTL-HAOS logs a warning.
 
 ### Device filtering
 
-You can restrict which decoded devices become entities using whitelist/blacklist rules:
+You can suppress unwanted devices using wildcard patterns (`*`).
 
 ```yaml
-rtl_whitelist:
-  - "Acurite-5n1*"
-  - "AmbientWeather*"
-rtl_blacklist:
-  - "EcoWitt-WH40*"
+device_blacklist:
+  - "SimpliSafe*"
+  - "EezTire*"
+
+device_whitelist: []  # if set non-empty, only matching devices are allowed
+# device_whitelist:
+#   - "Acurite-5n1*"
 ```
 
-(Exact matching behavior is defined in code; see `config.yaml` for the option names.)
-
-### Multiple RTL-SDR dongles with duplicate serials
-
-If you have multiple RTL-SDRs that report the same USB serial (common with some dongles), RTL-HAOS may suffix duplicates (e.g., `00000001-1`, `00000001-2`) to keep them distinct.  
-If you use manual `rtl_config` device IDs, make sure they match what the add-on logs show at startup.
-
 ---
 
-## Environment variables (dev / standalone)
+## Docker / standalone / development
 
-For non–Home Assistant usage or development runs, you can configure via environment variables. See `.env.example` for the complete list.
+For Docker/standalone runs, use `.env` (see `.env.example`). The add-on UI schema does not apply in this mode.
 
----
+Common env vars:
+- `MQTT_HOST`, `MQTT_PORT`, `MQTT_USER`, `MQTT_PASS`
+- `RTL_CONFIG` (JSON list of radio dicts)
+- `RTL_433_ARGS`, `RTL_433_BIN`, `RTL_433_CONFIG_PATH`, `RTL_433_CONFIG_INLINE`
+
+Example `RTL_CONFIG` using rtl_tcp:
+
+```bash
+RTL_CONFIG='[{"name":"Remote SDR","tcp_host":"192.168.1.10","tcp_port":1234,"freq":"433.92M","rate":"250k"}]'
+```

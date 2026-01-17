@@ -168,7 +168,7 @@ This section applies to **Docker** and **Native** installation methods only.
 
 Upgrading from v1.1.14 (or earlier)?
 
-- **Displayed version may include `+<build>`** (example: `v1.2.0-rc.1+046cc83`). This is *only* build metadata for logs/device info; the base add-on `version:` in `config.yaml` remains strict `X.Y.Z` for Home Assistant Supervisor comparisons.
+- **Displayed version may include `+<build>`** (example: `v1.2.0-rc.2+046cc83`). This is *only* build metadata for logs/device info; the base add-on `version:` in `config.yaml` remains a SemVer base version (`X.Y.Z` or `X.Y.Z-PRERELEASE`) for Home Assistant Supervisor comparisons.
 - **New optional rtl_433 passthrough knobs** are available (global env vars and per-radio fields) if you need manual gain/AGC/ppm/tuner settings or a full `rtl_433` config file.
 - **Add-on now maps `/share`**, so you can drop `rtl_433` config files into your HAOS share and reference them from RTL-HAOS.
 
@@ -338,15 +338,23 @@ battery_ok_clear_after: 300
 # Multi-Radio Configuration (leave empty for auto-detection)
 rtl_config:
   - name: Weather Radio # Friendly name
-    id: "101" # RTL-SDR serial number
+    id: "101" # RTL-SDR USB serial number
     freq: 433.92M # Frequency
     rate: 250k # Sample rate (optional)
+
   - name: Utility Meter
     id: "102"
     freq: 915M
     rate: 250k
-> Note: If `rtl_config` is empty, RTL-HAOS runs in “auto mode” and will attach to the first detected RTL-SDR only.
-> Configure `rtl_config` to run multiple dongles.
+
+  # rtl_tcp mode (network SDR): run rtl_tcp on another host and point RTL-HAOS at it.
+  # You can use either `device: "rtl_tcp:HOST:PORT"` or the explicit tcp_host/tcp_port keys.
+  - name: Remote SDR (rtl_tcp)
+    freq: 433.92M
+    rate: 250k
+    device: "rtl_tcp:192.168.1.10:1234"
+    # tcp_host: "192.168.1.10"
+    # tcp_port: 1234
 
 # Device Filtering
 device_blacklist: # Block specific device patterns
@@ -354,6 +362,8 @@ device_blacklist: # Block specific device patterns
   - "EezTire*"
 device_whitelist: [] # If set, only allow these patterns
 ```
+
+**Note:** If `rtl_config` is empty (`rtl_config: []`), RTL-HAOS runs in **auto mode** and will attach to detected RTL-SDR dongles automatically. Define `rtl_config` to pin specific radios, run multiple radios, or to use `rtl_tcp`.
 
 #### 4. Start the Add-on
 

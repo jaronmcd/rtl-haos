@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.2.0-rc.2 (Release Candidate 2)
+
+### HA add-on config + rtl_tcp quality-of-life
+- **DOCS:** Fix invalid README YAML example (copy/paste-safe) and add explicit Home Assistant add-on `rtl_tcp` example using `device: "rtl_tcp:HOST:PORT"`.
+- **FIX:** Reduce misleading config warnings for `rtl_tcp`/explicit `device` radios; harden hop interval parsing so invalid values do not break startup.
+- **NEW:** Add-on schema now accepts `tcp_host`/`tcp_port` inside `rtl_config` (optional alternative to `device: rtl_tcp:...`).
+- **DOCS:** Refresh `docs/CONFIG.md` to match current add-on options and `rtl_tcp` usage.
+
 ## v1.2.0-rc.1 (Release Candidate 1)
 
 ### rtl_433 passthrough (advanced tuning & full decoder control)

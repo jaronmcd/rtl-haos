@@ -312,11 +312,27 @@ def build_rtl_433_command(radio_config: dict) -> list[str]:
     tcp_port = radio_config.get("tcp_port")
 
     if tcp_host and str(tcp_host).strip():
-        # TCP mode: rtl_433 -d rtl_tcp:host:port
         tcp_host = str(tcp_host).strip()
-        tcp_port = int(tcp_port) if tcp_port else 1234
-        tcp_device = f"rtl_tcp:{tcp_host}:{tcp_port}"
+
+        # Accept int or str ports; default to 1234 if missing/invalid/out-of-range.
+        tcp_port_raw = tcp_port
+        tcp_port_i = 1234
+        if tcp_port_raw not in (None, "", 0):
+            try:
+                tcp_port_i = int(str(tcp_port_raw).strip())
+            except Exception:
+                tcp_port_i = 1234
+
+        if tcp_port_i <= 0 or tcp_port_i > 65535:
+            print(
+                f"WARNING: [CONFIG]: [Radio: {radio_name}] invalid tcp_port={tcp_port_raw!r}; "
+                "defaulting to 1234."
+            )
+            tcp_port_i = 1234
+
+        tcp_device = f"rtl_tcp:{tcp_host}:{tcp_port_i}"
         cmd.extend(["-d", tcp_device])
+
     else:
         # USB mode (existing logic)
         dev = radio_config.get("device")

@@ -264,3 +264,53 @@ def test_rtl433_args_overrides_per_radio_settings_and_warns(monkeypatch, capsys)
     assert "warning" in out
     assert "override" in out
     assert "-s" in out
+
+def test_build_cmd_uses_device_selector_rtl_tcp(monkeypatch):
+    import rtl_manager
+
+    radio = {
+        "index": 0,
+        "freq": "433.92M",
+        "rate": "250k",
+        "hop_interval": 0,
+        "name": "PC rtl_tcp",
+        "device": "rtl_tcp:192.168.1.223:1234",
+    }
+
+    cmd = rtl_manager.build_rtl_433_command(radio)
+    assert _find_flag_value(cmd, "-d") == "rtl_tcp:192.168.1.223:1234"
+
+
+def test_build_cmd_uses_tcp_host_port_over_device(monkeypatch):
+    import rtl_manager
+
+    radio = {
+        "index": 0,
+        "freq": "433.92M",
+        "rate": "250k",
+        "hop_interval": 0,
+        "name": "PC rtl_tcp",
+        "device": "0",  # should be ignored because tcp_host is set
+        "tcp_host": "192.168.1.223",
+        "tcp_port": 1234,
+    }
+
+    cmd = rtl_manager.build_rtl_433_command(radio)
+    assert _find_flag_value(cmd, "-d") == "rtl_tcp:192.168.1.223:1234"
+
+
+def test_build_cmd_tcp_port_defaults_to_1234_when_missing(monkeypatch):
+    import rtl_manager
+
+    radio = {
+        "index": 0,
+        "freq": "433.92M",
+        "rate": "250k",
+        "hop_interval": 0,
+        "name": "PC rtl_tcp",
+        "tcp_host": "192.168.1.223",
+        # tcp_port omitted
+    }
+
+    cmd = rtl_manager.build_rtl_433_command(radio)
+    assert _find_flag_value(cmd, "-d") == "rtl_tcp:192.168.1.223:1234"

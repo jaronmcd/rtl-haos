@@ -1,6 +1,6 @@
 name: "RTL-HAOS"
 description: "RTL-SDR to Home Assistant MQTT bridge with signal diagnostics and system monitoring"
-version: "1.2.0-rc.1"
+version: "1.2.0-rc.2"
 slug: rtl-haos
 url: "https://github.com/jaronmcd/rtl-haos"
 arch:
@@ -101,6 +101,11 @@ schema:
       id: str?
       rate: str?
       hop_interval: int?
+
+      # Optional rtl_tcp mode (network SDR).
+      # If set, rtl_433 is invoked with: -d rtl_tcp:<tcp_host>:<tcp_port>
+      tcp_host: str?
+      tcp_port: port?
 
       # Optional per-radio protocol filter (rtl_433 -R).
       # Provide a comma-separated list, e.g. "104,105".
