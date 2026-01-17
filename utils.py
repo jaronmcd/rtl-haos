@@ -63,59 +63,127 @@ def calculate_dew_point(temp_c, humidity):
         return None
 
 def validate_radio_config(radio_conf):
-    """
-    Analyzes a radio configuration dictionary for common user errors.
+    """Analyze a radio configuration dictionary for common user errors.
+
     Returns a list of warning strings.
+
+    This validator is intentionally best-effort: it should never raise and
+    should not block startup.
+
+    USB mode guidance:
+      - If you run more than one RTL-SDR, strongly prefer setting a unique
+        `id` (USB serial) per radio.
+
+    TCP mode guidance (rtl_tcp):
+      - If `tcp_host`/`tcp_port` is set OR `device` is an `rtl_tcp:HOST:PORT`
+        selector, `id` is not required.
     """
     warnings = []
-    
-    # 1. Check Frequency for missing 'M'
-    # rtl_433 defaults to Hz if no suffix is present.
-    # 433.92 -> 433 Hz (Invalid). 433.92M -> 433,920,000 Hz (Valid).
+
+    def _is_tcp_selector(dev: str) -> bool:
+        return dev.strip().lower().startswith("rtl_tcp:")
+
+    def _safe_int(value, default=0):
+        try:
+            if value is None:
+                return default
+            if isinstance(value, bool):
+                return int(value)
+            s = str(value).strip()
+            if s == "":
+                return default
+            return int(s)
+        except Exception:
+            return default
+
+    # 1) Frequency suffix check (rtl_433 defaults to Hz if no suffix is present)
     freq_str = str(radio_conf.get("freq", ""))
-    frequencies = [f.strip() for f in freq_str.split(",")]
-    
+    frequencies = [f.strip() for f in freq_str.split(",") if f.strip()]
+
     for f in frequencies:
-        # Regex: Matches pure numbers (int or float) with NO letters
+        # pure number with no unit suffix
         if re.match(r"^\d+(\.\d+)?$", f):
-            val = float(f)
+            try:
+                val = float(f)
+            except Exception:
+                continue
             # If value is < 1,000,000, it's almost certainly not Hz.
-            if val < 1000000:
+            if val < 1_000_000:
                 warnings.append(
                     f"Frequency '{f}' has no suffix and will be read as Hz (impossible). "
                     f"Did you mean '{f}M'?"
                 )
 
-    # 2. Check Hop Interval vs Frequency Count
-    # Hopping requires at least 2 frequencies.
-    hop = int(radio_conf.get("hop_interval", 0))
-    if hop > 0 and len(frequencies) < 2:
+    # 2) Hop interval sanity (hopping requires >= 2 freqs)
+    hop_raw = radio_conf.get("hop_interval", 0)
+    hop = _safe_int(hop_raw, 0)
+    if hop_raw not in (None, "", 0) and hop == 0:
+        warnings.append(
+            f"Hop interval '{hop_raw}' is not a valid integer; hopping will be disabled."
+        )
+
+    if hop > 0 and len(frequencies) < 2 and freq_str.strip():
         warnings.append(
             f"Hop interval is set to {hop}s, but only 1 frequency provided ({freq_str}). "
             "Hopping will be ignored."
         )
 
-    # 3. Check Sample Rate Suffix
-    # 250 -> 250 Hz (Way too slow). 250k -> 250,000 Hz (Standard).
+    # 3) Sample rate suffix check
     rate = str(radio_conf.get("rate", ""))
     if re.match(r"^\d+$", rate):
-        val = int(rate)
-        if val < 1000000: 
+        try:
+            val = int(rate)
+        except Exception:
+            val = 0
+        if val and val < 1_000_000:
             warnings.append(
                 f"Sample rate '{rate}' has no suffix (e.g. 'k'). "
                 f"Did you mean '{rate}k'?"
             )
 
-    # 4. Check for Missing or Empty ID (NEW)
-    # The system needs an ID to map the config to a specific USB stick.
+    # 4) Device selection / ID guidance
+    # If user explicitly pins a device (USB selector, index, Soapy selector, or rtl_tcp),
+    # `id` is not required.
+    dev = str(radio_conf.get("device") or "").strip()
+    tcp_host = str(radio_conf.get("tcp_host") or "").strip()
+    tcp_port = radio_conf.get("tcp_port")
     r_id = radio_conf.get("id")
-    if r_id is None or str(r_id).strip() == "":
+
+    is_tcp = bool(tcp_host) or _is_tcp_selector(dev)
+
+    if _is_tcp_selector(dev):
+        # Best-effort parse: rtl_tcp:HOST:PORT
+        parts = dev.split(":", 2)
+        if len(parts) < 3 or not parts[1].strip():
+            warnings.append(
+                f"Device selector '{dev}' looks like rtl_tcp but is missing HOST and/or PORT. "
+                "Expected 'rtl_tcp:HOST:PORT'."
+            )
+        else:
+            # PORT can be omitted in some rtl_tcp client implementations, but rtl_433 expects it.
+            host = parts[1].strip()
+            port_part = parts[2].strip() if len(parts) >= 3 else ""
+            if host and port_part:
+                if not port_part.isdigit():
+                    warnings.append(
+                        f"rtl_tcp port '{port_part}' is not numeric in device selector '{dev}'."
+                    )
+
+    if tcp_host and tcp_port not in (None, ""):
+        # tcp_port is validated by add-on schema, but standalone JSON/env may bypass it.
+        if _safe_int(tcp_port, 0) <= 0:
+            warnings.append(
+                f"tcp_port '{tcp_port}' is not a valid port; rtl_tcp will default to 1234."
+            )
+
+    if (r_id is None or str(r_id).strip() == "") and not dev and not is_tcp:
         warnings.append(
-            "Configuration is missing a device 'id'. "
+            "Configuration is missing a device 'id' (USB serial) or explicit 'device' selector. "
             "This radio may default to index 0 and conflict with others."
         )
 
     return warnings
+
 
 
 def get_homeassistant_country_code() -> str | None:

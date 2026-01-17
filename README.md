@@ -168,7 +168,7 @@ This section applies to **Docker** and **Native** installation methods only.
 
 Upgrading from v1.1.14 (or earlier)?
 
-- **Displayed version may include `+<build>`** (example: `v1.2.0-rc.1+046cc83`). This is *only* build metadata for logs/device info; the base add-on `version:` in `config.yaml` remains strict `X.Y.Z` for Home Assistant Supervisor comparisons.
+- **Displayed version may include `+<build>`** (example: `v1.2.0-rc.2+046cc83`). This is *only* build metadata for logs/device info; the base add-on `version:` in `config.yaml` remains a SemVer base version (`X.Y.Z` or `X.Y.Z-PRERELEASE`) for Home Assistant Supervisor comparisons.
 - **New optional rtl_433 passthrough knobs** are available (global env vars and per-radio fields) if you need manual gain/AGC/ppm/tuner settings or a full `rtl_433` config file.
 - **Add-on now maps `/share`**, so you can drop `rtl_433` config files into your HAOS share and reference them from RTL-HAOS.
 
@@ -238,9 +238,24 @@ RTL_HAOS_BUILD='dev.local'
 For multiple RTL-SDR dongles on different frequencies:
 
 ```bash
-# Multiple radios 
+# Multiple USB radios
 RTL_CONFIG='[{"name": "Weather Radio", "id": "101", "freq": "433.92M", "rate": "250k"}, {"name": "Utility Meter", "id": "102", "freq": "915M", "rate": "250k"}]'
 ```
+
+**TCP Source Setup (rtl_tcp):**
+
+You can also connect to a remote SDR source using `rtl_tcp` instead of a local USB dongle:
+
+```bash
+# TCP source (e.g., from Ultrafeeder or another rtl_tcp server)
+RTL_CONFIG='[{"name": "Remote SDR", "tcp_host": "192.168.1.10", "tcp_port": 1234, "freq": "433.92M", "rate": "250k"}]'
+```
+
+When using TCP mode:
+- No USB device is required (`--privileged` and `--device` flags are not needed)
+- The `tcp_host` and `tcp_port` parameters specify the remote rtl_tcp server
+- Default port is 1234 if `tcp_port` is not specified
+- You can mix USB and TCP sources in the same configuration
 
 **Device Filtering:**
 
@@ -253,6 +268,18 @@ DEVICE_BLACKLIST='["SimpliSafe*", "EezTire*"]'
 # Device filtering (allow only specific devices - optional)
 DEVICE_WHITELIST='["Acurite-5n1*", "AmbientWeather*"]'
 ```
+
+Pattern syntax (for `DEVICE_WHITELIST` / `DEVICE_BLACKLIST`):
+- Patterns use shell-style glob matching (Python `fnmatch`): `*`, `?`, and `[]` character classes.
+- Patterns are matched against the decoded device's **ID**, **model**, and **type** fields.
+- Matching is case-insensitive.
+- Regular expressions (e.g., `^...$`) are not supported.
+
+Examples:
+- Whitelist by exact model: `DEVICE_WHITELIST='["Cotech-367959"]'`
+- Whitelist by prefix: `DEVICE_WHITELIST='["Cotech*"]'`
+- Whitelist by ID: `DEVICE_WHITELIST='["101"]'`
+
 **Misc Configuration:**
 ```bash
 # Toggle "Last: HH:MM:SS" vs "Online" in status
@@ -323,22 +350,42 @@ battery_ok_clear_after: 300
 # Multi-Radio Configuration (leave empty for auto-detection)
 rtl_config:
   - name: Weather Radio # Friendly name
-    id: "101" # RTL-SDR serial number
+    id: "101" # RTL-SDR USB serial number
     freq: 433.92M # Frequency
     rate: 250k # Sample rate (optional)
+
   - name: Utility Meter
     id: "102"
     freq: 915M
     rate: 250k
-> Note: If `rtl_config` is empty, RTL-HAOS runs in “auto mode” and will attach to the first detected RTL-SDR only.
-> Configure `rtl_config` to run multiple dongles.
+
+  # rtl_tcp mode (network SDR): run rtl_tcp on another host and point RTL-HAOS at it.
+  # You can use either `device: "rtl_tcp:HOST:PORT"` or the explicit tcp_host/tcp_port keys.
+  - name: Remote SDR (rtl_tcp)
+    freq: 433.92M
+    rate: 250k
+    device: "rtl_tcp:192.168.1.10:1234"
+    # tcp_host: "192.168.1.10"
+    # tcp_port: 1234
 
 # Device Filtering
 device_blacklist: # Block specific device patterns
   - "SimpliSafe*"
   - "EezTire*"
 device_whitelist: [] # If set, only allow these patterns
+
+# Pattern syntax
+# - Patterns use shell-style glob matching (fnmatch): *, ?, and [] character classes.
+# - Patterns are matched against the decoded device's ID, model, and type fields.
+# - Matching is case-insensitive.
+# - Regular expressions (e.g., ^...$) are not supported.
+# Examples:
+# - "Cotech-367959"  # exact model
+# - "Cotech*"       # model prefix
+# - "101"           # exact ID
 ```
+
+**Note:** If `rtl_config` is empty (`rtl_config: []`), RTL-HAOS runs in **auto mode** and will attach to detected RTL-SDR dongles automatically. Define `rtl_config` to pin specific radios, run multiple radios, or to use `rtl_tcp`.
 
 #### 4. Start the Add-on
 
@@ -359,13 +406,16 @@ Once you have set up your configuration, you can run rtl-haos with Docker.
 docker compose up -d
 ```
 
+> **Docker Compose note (USB vs rtl_tcp):** The provided `docker-compose.yml` is configured for **rtl_tcp / network SDR** mode by default and does **not** mount USB devices.
+> If you are using a locally attached USB RTL-SDR, uncomment `privileged: true` and the `/dev/bus/usb` device mapping in `docker-compose.yml`.
+
 #### Or run with Docker directly
 
 ```bash
 # Build the image
 docker build -t rtl-haos .
 
-# Run the container
+# Run the container (USB mode)
 docker run -d \
   --name rtl-haos \
   --restart unless-stopped \
@@ -373,9 +423,16 @@ docker run -d \
   --device /dev/bus/usb:/dev/bus/usb \
   --env-file .env \
   rtl-haos
+
+# Run the container (TCP mode - no USB device needed)
+docker run -d \
+  --name rtl-haos \
+  --restart unless-stopped \
+  --env-file .env \
+  rtl-haos
 ```
 
-> **Note:** The `--privileged` and `--device` flags are required for USB access to the RTL-SDR dongle.
+> **Note:** The `--privileged` and `--device` flags are required for USB access to the RTL-SDR dongle. When using TCP mode (rtl_tcp), these flags are not needed.
 
 #### View logs
 

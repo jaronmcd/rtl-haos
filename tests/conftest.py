@@ -5,9 +5,8 @@ import types
 import importlib.machinery
 import unittest.mock as um
 import warnings
-
 import pytest
-
+import config
 # Some container/CI environments ship a vendored psutil (e.g. via ddtrace) that
 # emits noisy RuntimeWarnings on import due to missing /proc/vmstat.
 warnings.filterwarnings(
@@ -15,6 +14,14 @@ warnings.filterwarnings(
     message=r".*swap memory stats couldn't be determined.*",
     category=RuntimeWarning,
 )
+
+@pytest.fixture(autouse=True)
+def _isolate_device_filters(monkeypatch):
+    # Tests should not be affected by a developer's .env / HA options.
+    monkeypatch.setattr(config, "DEVICE_WHITELIST", [], raising=False)
+
+    # Preserve expected behavior: SimpliSafe remains blocked in tests that assert it.
+    monkeypatch.setattr(config, "DEVICE_BLACKLIST", ["SimpliSafe*", "EezTire*"], raising=False)
 
 
 @pytest.fixture(autouse=True)

@@ -307,14 +307,42 @@ def build_rtl_433_command(radio_config: dict) -> list[str]:
         cmd.extend(["-c", cfg_file])
 
     # Device selection (-d) defaults.
-    dev = radio_config.get("device")
-    dev_index = radio_config.get("index")
-    if dev is not None and str(dev).strip():
-        cmd.extend(["-d", str(dev).strip()])
-    elif dev_index is not None:
-        cmd.extend(["-d", str(dev_index)])
+    # Priority: tcp_host/tcp_port (TCP mode) -> device -> index -> radio_id (USB mode)
+    tcp_host = radio_config.get("tcp_host")
+    tcp_port = radio_config.get("tcp_port")
+
+    if tcp_host and str(tcp_host).strip():
+        tcp_host = str(tcp_host).strip()
+
+        # Accept int or str ports; default to 1234 if missing/invalid/out-of-range.
+        tcp_port_raw = tcp_port
+        tcp_port_i = 1234
+        if tcp_port_raw not in (None, "", 0):
+            try:
+                tcp_port_i = int(str(tcp_port_raw).strip())
+            except Exception:
+                tcp_port_i = 1234
+
+        if tcp_port_i <= 0 or tcp_port_i > 65535:
+            print(
+                f"WARNING: [CONFIG]: [Radio: {radio_name}] invalid tcp_port={tcp_port_raw!r}; "
+                "defaulting to 1234."
+            )
+            tcp_port_i = 1234
+
+        tcp_device = f"rtl_tcp:{tcp_host}:{tcp_port_i}"
+        cmd.extend(["-d", tcp_device])
+
     else:
-        cmd.extend(["-d", str(radio_id)])
+        # USB mode (existing logic)
+        dev = radio_config.get("device")
+        dev_index = radio_config.get("index")
+        if dev is not None and str(dev).strip():
+            cmd.extend(["-d", str(dev).strip()])
+        elif dev_index is not None:
+            cmd.extend(["-d", str(dev_index)])
+        else:
+            cmd.extend(["-d", str(radio_id)])
 
     # Frequency (-f)
     freq_str = str(radio_config.get("freq", getattr(config, "RTL_DEFAULT_FREQ", "433.92M")))
@@ -637,12 +665,46 @@ def _debug_dump_packet(
 def is_blocked_device(clean_id: str, model: str, dev_type: str) -> bool:
     patterns = getattr(config, "DEVICE_BLACKLIST", [])
     for pattern in patterns:
-        if fnmatch.fnmatch(str(clean_id), pattern):
+        # Treat patterns as glob-style matches (fnmatch). Match against ID, model, and type.
+        # For user friendliness, also attempt a case-insensitive match.
+        p = str(pattern)
+        pl = p.lower()
+        if fnmatch.fnmatch(str(clean_id), p) or fnmatch.fnmatch(str(clean_id).lower(), pl):
             return True
-        if fnmatch.fnmatch(str(model), pattern):
+        if fnmatch.fnmatch(str(model), p) or fnmatch.fnmatch(str(model).lower(), pl):
             return True
-        if fnmatch.fnmatch(str(dev_type), pattern):
+        if fnmatch.fnmatch(str(dev_type), p) or fnmatch.fnmatch(str(dev_type).lower(), pl):
             return True
+    return False
+
+
+def is_allowed_device(clean_id: str, model: str, dev_type: str, raw_id: Optional[object] = None) -> bool:
+    """Whitelist allow-list.
+
+    If DEVICE_WHITELIST is empty, everything is allowed.
+    If set, at least one pattern must match.
+
+    Patterns are treated as glob-style matches (fnmatch), consistent with blacklist behavior.
+    Matching is attempted against:
+      - clean_id (mqtt-safe ID used for topics/unique_id)
+      - model (rtl_433 "model" field)
+      - dev_type (rtl_433 "type" field, if present)
+      - raw_id (rtl_433 "id" field, if provided)
+    """
+    patterns = getattr(config, "DEVICE_WHITELIST", [])
+    if not patterns:
+        return True
+
+    candidates: list[str] = [str(clean_id), str(model), str(dev_type)]
+    if raw_id is not None:
+        candidates.append(str(raw_id))
+
+    for pattern in patterns:
+        p = str(pattern)
+        pl = p.lower()
+        for c in candidates:
+            if fnmatch.fnmatch(c, p) or fnmatch.fnmatch(c.lower(), pl):
+                return True
     return False
 
 
@@ -814,8 +876,7 @@ def rtl_loop(radio_config: dict, mqtt_handler, data_processor, sys_id: str, sys_
                     if is_blocked_device(clean_id, model, dev_type):
                         continue
 
-                    whitelist = getattr(config, "DEVICE_WHITELIST", [])
-                    if whitelist and not any(fnmatch.fnmatch(clean_id, p) for p in whitelist):
+                    if not is_allowed_device(clean_id, model, dev_type, raw_id=raw_id):
                         continue
 
                     # Neptune R900 Water Meter

@@ -63,3 +63,27 @@ def test_validate_radio_config():
     bad_rate = {"id": "1", "rate": "250"}
     warns = validate_radio_config(bad_rate)
     assert any("did you mean '250k'" in w.lower() for w in warns)
+
+def test_validate_radio_config_does_not_require_id_for_rtl_tcp_device():
+    # device selector implies explicit device choice; id warning should NOT trigger
+    cfg = {"name": "PC rtl_tcp", "freq": "433.92M", "device": "rtl_tcp:192.168.1.223:1234"}
+    warns = validate_radio_config(cfg)
+    assert not any("missing a device 'id'" in w.lower() for w in warns)
+
+
+def test_validate_radio_config_does_not_require_id_for_tcp_host_port():
+    cfg = {"name": "PC rtl_tcp", "freq": "433.92M", "tcp_host": "192.168.1.223", "tcp_port": 1234}
+    warns = validate_radio_config(cfg)
+    assert not any("missing a device 'id'" in w.lower() for w in warns)
+
+
+def test_validate_radio_config_warns_on_bad_rtl_tcp_device_port():
+    cfg = {"name": "Bad rtl_tcp", "freq": "433.92M", "device": "rtl_tcp:192.168.1.223:notaport"}
+    warns = validate_radio_config(cfg)
+    assert any("not numeric" in w.lower() for w in warns)
+
+
+def test_validate_radio_config_warns_on_invalid_hop_interval_string():
+    cfg = {"id": "1", "freq": "868M,915M", "hop_interval": "abc"}
+    warns = validate_radio_config(cfg)
+    assert any("not a valid integer" in w.lower() for w in warns)

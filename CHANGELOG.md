@@ -1,5 +1,14 @@
 # Changelog
 
+## v1.2.0-rc.2 (Release Candidate 2)
+
+### HA add-on config + rtl_tcp quality-of-life
+- **DOCS:** Fix invalid README YAML example (copy/paste-safe) and add explicit Home Assistant add-on `rtl_tcp` example using `device: "rtl_tcp:HOST:PORT"`.
+- **FIX:** Reduce misleading config warnings for `rtl_tcp`/explicit `device` radios; harden hop interval parsing so invalid values do not break startup.
+- **NEW:** Add-on schema now accepts `tcp_host`/`tcp_port` inside `rtl_config` (optional alternative to `device: rtl_tcp:...`).
+- **DOCS:** Refresh `docs/CONFIG.md` to match current add-on options and `rtl_tcp` usage.
+- **DOCS:** Clarify that `docker-compose.yml` defaults to **rtl_tcp/network SDR** (USB passthrough is opt-in via `privileged` + `/dev/bus/usb`).
+
 ## v1.2.0-rc.1 (Release Candidate 1)
 
 ### rtl_433 passthrough (advanced tuning & full decoder control)
@@ -24,6 +33,10 @@
 - **CHANGED:** `rtl_433` command creation is centralized and always forces `-F json -M level` so RTL-HAOS can parse messages (non-JSON lines are ignored).
 - **NEW:** Startup logs print the full `rtl_433` command line per radio (`rtl_433 cmd ...`) for copy/paste troubleshooting.
 - **CHANGED:** Global passthrough (`RTL_433_ARGS` / `rtl_433_args`) now acts as a **global override**: any option present wins over per-radio settings/auto defaults, with a **WARNING per radio** and de-duplicated flags.
+
+### Filtering
+- **FIX:** `device_whitelist` now matches patterns against the decoded device's **ID**, **model**, and **type** (previously it only matched the cleaned ID), restoring documented model-based whitelisting behavior.
+- **DOCS:** Clarify whitelist/blacklist glob syntax (no regex) and add examples for model- and ID-based rules.
 
 ### Tests
 - **NEW:** Unit tests for version handling and command building.
