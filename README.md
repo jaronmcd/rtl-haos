@@ -63,48 +63,47 @@ See rtl_433 documentation for supported devices: https://github.com/merbanan/rtl
 
 ```mermaid
 graph TD
+    %% RF emissions
     subgraph "RF Devices (Airwaves)"
-        A(<b>Weather Station</b>) -->|433.92 MHz| D(<b>Antenna</b>)
-        B(<b>Motion Sensor</b>) -->|315 MHz| D
-        C(<b>Utility Meter</b>) -->|915 MHz| D
+        A[Weather Station] -->|433/868/915 MHz| ANT[Antenna]
+        B[Motion Sensor] -->|315/433 MHz| ANT
+        C[Utility Meter] -->|868/915 MHz| ANT
     end
 
-    subgraph "Host (Raspberry Pi / Linux)"
-        D(<b>RTL-SDR Dongle</b>) -->|USB Signal| E(<b>rtl_433 Binary</b>)
-        E -->|Raw JSON| F("<b>RTL-HAOS Bridge</b><br/>(This Software)")
+    %% Option A: Local USB SDR
+    subgraph "Option A: Local USB SDR"
+        USBSDR[RTL-SDR Dongle]
+    end
+    ANT -->|Local USB| USBSDR
 
-        subgraph "System Stats"
-            H(<b>CPU/RAM</b>) --> F
-            I(<b>Disk/Temp</b>) --> F
-        end
+    %% Option B: Remote SDR over rtl_tcp
+    subgraph "Option B: Remote SDR Host (rtl_tcp)"
+        RSDR[RTL-SDR Dongle] -->|IQ samples| RTLTCP[rtl_tcp server]
+    end
+    ANT -->|Remote SDR| RSDR
+
+    %% RTL-HAOS host runs rtl_433 + the bridge
+    subgraph "RTL-HAOS Host (HAOS Add-on / Docker / Linux)"
+        USBSDR -->|USB| RTL433[rtl_433]
+        RTLTCP -->|TCP port 1234| RTL433
+        RTL433 -->|Decoded JSON packets| BRIDGE[RTL-HAOS Bridge]
+        STATS[CPU/RAM/Disk/Temp] --> BRIDGE
     end
 
-    %% MQTT Broker
-    F -->|MQTT Discovery JSON + state topics| G("<b>MQTT Broker</b><br/>(External or HAOS Add-on)")
+    %% MQTT and Home Assistant
+    BRIDGE -->|MQTT Discovery + State Topics| MQTT[MQTT Broker]
 
     subgraph "Home Assistant"
-        G -->|MQTT Auto-Discovery| J(<b>Sensor Entities</b>)
-        G -->|Diagnostic Data| K(<b>System Monitor</b>)
+        MQTT --> ENT[Sensor Entities]
+        MQTT --> MON[System Monitor + Diagnostics]
     end
 
-    %% STYLING
+    %% Styling
+    style BRIDGE fill:#f96,stroke:#333,stroke-width:4px,color:black
+    style MQTT fill:#bbdefb,stroke:#0d47a1,stroke-width:4px,color:black
+    style ENT fill:#5fb,stroke:#333,stroke-width:2px,color:black
+    style MON fill:#cfd8dc,stroke:#333,stroke-width:2px,color:black
 
-    %% RTL Bridge (Orange)
-    style F fill:#f96,stroke:#333,stroke-width:4px,color:black,rx:10,ry:10
-
-    %% MQTT Broker (Blue)
-    style G fill:#bbdefb,stroke:#0d47a1,stroke-width:4px,color:black,rx:10,ry:10
-
-    %% Sensor Entities (Green)
-    style J fill:#5fb,stroke:#333,stroke-width:2px,color:black,rx:10,ry:10
-
-    %% System Monitor (Gray)
-    style K fill:#cfd8dc,stroke:#333,stroke-width:2px,color:black,rx:10,ry:10
-
-    %% Input Devices (White)
-    style A fill:#fff,stroke:#333,stroke-width:2px,color:black,rx:5,ry:5
-    style B fill:#fff,stroke:#333,stroke-width:2px,color:black,rx:5,ry:5
-    style C fill:#fff,stroke:#333,stroke-width:2px,color:black,rx:5,ry:5
 ```
 
 ---
