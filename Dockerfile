@@ -26,10 +26,14 @@ RUN apk add --no-cache \
     python3-dev \
     gcc \
     musl-dev \
-    linux-headers
+    linux-headers \
+    curl \
+    ca-certificates
 
-# Copy uv from official image
-COPY --from=ghcr.io/astral-sh/uv:0.9.16 /uv /uvx /bin/
+# Install uv using the official script to ensure correct architecture support
+RUN curl -Ls https://astral.sh/uv/install.sh | sh \
+    && install -m 755 /root/.local/bin/uv /usr/local/bin/uv \
+    && rm -rf /root/.local
 
 WORKDIR /app
 
