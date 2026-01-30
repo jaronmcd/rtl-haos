@@ -14,7 +14,7 @@
 # STAGE 1: Builder - install Python deps with compilation support
 # ==========================================================================
 ARG BUILD_FROM=alpine:3.21
-FROM ${BUILD_FROM} as builder
+FROM ${BUILD_FROM} AS builder
 
 # Build deps
 # - python3/python3-dev: needed for standalone builds; HA base-python already includes Python,
