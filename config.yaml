@@ -64,6 +64,12 @@ options:
   # manually (and you are responsible for the full radio config).
   rtl_auto_band_plan: "auto"
 
+  # Single-SDR band-plan mode (issue #103). With only one dongle it normally runs
+  # as the 433 MHz primary, so the 900 MHz meter band is unreachable. Set this to
+  # us/eu/world/auto to make a solo dongle use the secondary (900 MHz) band plan.
+  #   off | auto | us | eu | world
+  rtl_single_sdr_mode: "off"
+
   # --- Device Filtering ---
   # Define device patterns to allow or disallow.
   # Patterns use shell-style glob matching (Python fnmatch): *, ?, and [] character classes.
@@ -102,6 +108,7 @@ schema:
 
   # Auto multi-radio (when rtl_config is empty)
   rtl_auto_band_plan: list(auto|us|eu|world)
+  rtl_single_sdr_mode: list(off|auto|us|eu|world)
 
   battery_ok_clear_after: int
 

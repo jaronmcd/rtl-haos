@@ -26,6 +26,7 @@ See rtl_433 documentation for supported devices: https://github.com/merbanan/rtl
     - **US/CA/AU/NZ (and most others):** 915 MHz
     - If Home Assistant country is unknown, it will hop 868/915 on Radio #2
   - **Radio #3 (if present):** a regional hopper for “interesting” bands that **does not intentionally overlap** Radio 1/2.
+  - **Single-SDR band plan (`rtl_single_sdr_mode`):** With only one dongle, auto mode normally starts it as **Radio #1 (433.92 MHz)**, so the 900 MHz "Radio #2" band used for utility/water/gas meters is unreachable. Set `rtl_single_sdr_mode` to `us`/`eu`/`world`/`auto` to make a solo dongle adopt the **secondary (high-band) plan** instead — e.g. `us` → 915 MHz. Defaults to `off` (legacy behavior). Honors `rtl_auto_secondary_freq` / `rtl_auto_secondary_rate` just like Radio #2.
   - Want full control of rates / hop intervals / exact freqs? Define `rtl_config` (manual mode) and you are responsible for the complete radio configuration.
 
 - **Zero-Config Discovery:** Sensors appear automatically in Home Assistant (via MQTT Discovery) with correct units, icons, and friendly names.

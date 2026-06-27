@@ -110,6 +110,20 @@ class Settings(BaseSettings):
     # If left blank, we fall back to the 'auto' behavior.
     rtl_auto_secondary_freq: str = Field(default="")
 
+    # Single-SDR band-plan mode (issue #103).
+    # When only ONE dongle is present it is normally started as the PRIMARY radio
+    # (rtl_default_freq, typically 433.92M), so the 900 MHz "secondary" band plan
+    # used for utility/meter decoding is unreachable. Setting this to anything
+    # other than "off" makes a solo dongle adopt the SECONDARY band-plan behavior
+    # (the same logic Radio #2 uses in auto multi-mode).
+    #  - off    : legacy behavior (solo dongle = primary / rtl_default_freq)
+    #  - auto   : infer secondary band from HA country (else hop 868/915)
+    #  - us     : 915M
+    #  - eu     : 868M
+    #  - world  : hop 868M,915M
+    # Honors rtl_auto_secondary_freq / rtl_auto_secondary_rate just like Radio #2.
+    rtl_single_sdr_mode: str = Field(default="off")
+
     # Auto primary/secondary rates (freqs are chosen elsewhere)
     rtl_auto_primary_rate: str = Field(default="250k")
     rtl_auto_secondary_rate: str = Field(default="1024k")
@@ -275,6 +289,7 @@ RTL_AUTO_MAX_RADIOS = settings.rtl_auto_max_radios
 RTL_AUTO_HARD_CAP = settings.rtl_auto_hard_cap
 RTL_AUTO_BAND_PLAN = settings.rtl_auto_band_plan
 RTL_AUTO_SECONDARY_FREQ = settings.rtl_auto_secondary_freq
+RTL_SINGLE_SDR_MODE = settings.rtl_single_sdr_mode
 RTL_AUTO_PRIMARY_RATE = settings.rtl_auto_primary_rate
 RTL_AUTO_SECONDARY_RATE = settings.rtl_auto_secondary_rate
 RTL_AUTO_HOPPER_FREQS = settings.rtl_auto_hopper_freqs

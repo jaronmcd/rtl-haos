@@ -535,31 +535,76 @@ def main():
                     )
 
             else:
-                print("[STARTUP] Unconfigured Mode: Starting PRIMARY radio only.")
-
                 dev = detected_devices[0]
                 dev_name = dev.get("name", "Primary")
 
-                # 1. SMART DEFAULT LOGIC
-                def_freqs = config.RTL_DEFAULT_FREQ.split(",")
-                def_hop = config.RTL_DEFAULT_HOP_INTERVAL
-                if len(def_freqs) < 2:
-                    def_hop = 0
+                # Single-SDR band-plan mode (issue #103): let a solo dongle adopt the
+                # SECONDARY (900 MHz / meter) band plan instead of being locked to the
+                # primary 433 MHz default. Reuses the exact Radio #2 logic.
+                single_mode = str(getattr(config, "RTL_SINGLE_SDR_MODE", "off") or "off").strip().lower()
 
-                radio_setup = {
-                    "slot": 0,
-                    "hop_interval": def_hop,
-                    "rate": config.RTL_DEFAULT_RATE,
-                    "freq": config.RTL_DEFAULT_FREQ
-                }
+                if single_mode not in ("", "off", "false", "none", "0"):
+                    print("[STARTUP] Unconfigured Mode: Single-SDR band-plan mode "
+                          f"(rtl_single_sdr_mode={single_mode}) -> using secondary band plan.")
 
-                radio_setup.update(dev)
+                    country = get_homeassistant_country_code()
+                    sec_override = str(getattr(config, "RTL_AUTO_SECONDARY_FREQ", "") or "").strip()
+                    sec_freq, sec_hop = choose_secondary_band_defaults(
+                        plan=single_mode,
+                        country_code=country,
+                        secondary_override=sec_override,
+                    )
 
-                warns = validate_radio_config(radio_setup)
-                for w in warns:
-                    print(f"[STARTUP] DEFAULT CONFIG WARNING: [Radio: {dev_name}] {w}")
+                    sec_list = [s.strip() for s in str(sec_freq).split(",") if s.strip()]
+                    hop = int(sec_hop or 0)
+                    if len(sec_list) < 2:
+                        hop = 0
+                    elif hop <= 0:
+                        hop = 15
 
-                print(f"[STARTUP] Radio #1 ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
+                    radio_setup = {
+                        "slot": 0,
+                        "hop_interval": hop,
+                        "rate": getattr(config, "RTL_AUTO_SECONDARY_RATE", "1024k"),
+                        "freq": sec_freq,
+                    }
+                    radio_setup.update(dev)
+
+                    warns = validate_radio_config(radio_setup)
+                    for w in warns:
+                        print(f"[STARTUP] DEFAULT CONFIG WARNING: [Radio: {dev_name}] {w}")
+
+                    if country:
+                        print(f"[STARTUP] Single-SDR Mode: HA country={country}, "
+                              f"plan={single_mode} -> {radio_setup['freq']}")
+                    else:
+                        print(f"[STARTUP] Single-SDR Mode: HA country=unknown, "
+                              f"plan={single_mode} -> {radio_setup['freq']}")
+                    print(f"[STARTUP] Radio #1 ({dev['name']}) -> {radio_setup['freq']} "
+                          f"(Rate: {radio_setup['rate']}, Hop: {radio_setup['hop_interval']})")
+                else:
+                    print("[STARTUP] Unconfigured Mode: Starting PRIMARY radio only.")
+
+                    # 1. SMART DEFAULT LOGIC
+                    def_freqs = config.RTL_DEFAULT_FREQ.split(",")
+                    def_hop = config.RTL_DEFAULT_HOP_INTERVAL
+                    if len(def_freqs) < 2:
+                        def_hop = 0
+
+                    radio_setup = {
+                        "slot": 0,
+                        "hop_interval": def_hop,
+                        "rate": config.RTL_DEFAULT_RATE,
+                        "freq": config.RTL_DEFAULT_FREQ
+                    }
+
+                    radio_setup.update(dev)
+
+                    warns = validate_radio_config(radio_setup)
+                    for w in warns:
+                        print(f"[STARTUP] DEFAULT CONFIG WARNING: [Radio: {dev_name}] {w}")
+
+                    print(f"[STARTUP] Radio #1 ({dev['name']}) -> Defaulting to {radio_setup['freq']}")
 
                 if len(detected_devices) > 1:
                     print(f"[STARTUP] WARNING: [System] {len(detected_devices)-1} additional SDR(s) detected but ignored. Enable Auto Multi-Radio or configure rtl_config to use them.")

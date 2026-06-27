@@ -81,6 +81,8 @@ def _setup_main_for_test(monkeypatch, detected_devices, country_code):
     monkeypatch.setattr(main_mod.config, "RTL_AUTO_HOPPER_HOP_INTERVAL", 20)
     monkeypatch.setattr(main_mod.config, "RTL_AUTO_HOPPER_RATE", "1024k")
 
+    monkeypatch.setattr(main_mod.config, "RTL_SINGLE_SDR_MODE", "off")
+
     # Exit the infinite loop quickly (it sleeps(1) in the main loop)
     def fake_sleep(seconds):
         if seconds == 1:
@@ -155,5 +157,62 @@ def test_auto_multi_three_radios_unknown_country_splits_868_915(monkeypatch):
 
     assert radios_by_slot[2]["freq"] == "915M"
     assert radios_by_slot[2]["hop_interval"] == 0
+
+
+def test_single_sdr_mode_us_uses_secondary_band(monkeypatch):
+    # Issue #103: one dongle + rtl_single_sdr_mode=us should run the 900 MHz
+    # secondary band plan instead of the 433 MHz primary default.
+    detected = [{"index": 0, "id": "00000001", "name": "RTL_00000001"}]
+
+    _setup_main_for_test(monkeypatch, detected_devices=detected, country_code="US")
+    monkeypatch.setattr(main_mod.config, "RTL_SINGLE_SDR_MODE", "us")
+
+    main_mod.main()
+
+    threads = _rtl_threads()
+    assert len(threads) == 1
+
+    r = threads[0].args[0]
+    assert r["slot"] == 0
+    assert r["freq"] == "915M"
+    assert r["rate"] == "1024k"
+    assert r["hop_interval"] == 0
+    # device fields are preserved
+    assert r["id"] == "00000001"
+    assert r["index"] == 0
+
+
+def test_single_sdr_mode_world_hops_both_bands(monkeypatch):
+    # world plan -> hop 868M,915M with a positive hop interval.
+    detected = [{"index": 0, "id": "00000001", "name": "RTL_00000001"}]
+
+    _setup_main_for_test(monkeypatch, detected_devices=detected, country_code=None)
+    monkeypatch.setattr(main_mod.config, "RTL_SINGLE_SDR_MODE", "world")
+
+    main_mod.main()
+
+    threads = _rtl_threads()
+    assert len(threads) == 1
+
+    r = threads[0].args[0]
+    assert r["freq"] == "868M,915M"
+    assert r["hop_interval"] > 0
+
+
+def test_single_sdr_mode_off_keeps_primary_default(monkeypatch):
+    # Default/off -> legacy behavior: solo dongle stays on the 433 MHz primary.
+    detected = [{"index": 0, "id": "00000001", "name": "RTL_00000001"}]
+
+    _setup_main_for_test(monkeypatch, detected_devices=detected, country_code="US")
+    monkeypatch.setattr(main_mod.config, "RTL_SINGLE_SDR_MODE", "off")
+
+    main_mod.main()
+
+    threads = _rtl_threads()
+    assert len(threads) == 1
+
+    r = threads[0].args[0]
+    assert r["freq"] == "433.92M"
+    assert r["rate"] == "250k"
 
 

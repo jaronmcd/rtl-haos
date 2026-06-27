@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+### Single-SDR band plan (#103)
+- **NEW:** `rtl_single_sdr_mode` option lets a single dongle use the **secondary (900 MHz) band plan** instead of being locked to the 433 MHz primary. Set to `us`/`eu`/`world`/`auto` to reach utility/meter bands with one SDR; defaults to `off` (legacy behavior). Reuses the existing Radio #2 logic and honors `rtl_auto_secondary_freq`/`rtl_auto_secondary_rate`.
+
 ## v1.2.0-rc.2 (Release Candidate 2)
 
 ### HA add-on config + rtl_tcp quality-of-life
