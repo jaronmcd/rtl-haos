@@ -13,7 +13,7 @@
 # ==========================================================================
 # STAGE 1: Builder - install Python deps with compilation support
 # ==========================================================================
-ARG BUILD_FROM=alpine:3.21
+ARG BUILD_FROM=alpine:3.24
 FROM ${BUILD_FROM} AS builder
 
 # Build deps
@@ -29,7 +29,7 @@ RUN apk add --no-cache \
     linux-headers
 
 # Copy uv from official image
-COPY --from=ghcr.io/astral-sh/uv:0.9.16 /uv /uvx /bin/
+COPY --from=ghcr.io/astral-sh/uv:0.12.17 /uv /uvx /bin/
 
 WORKDIR /app
 
