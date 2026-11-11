@@ -1,4 +1,4 @@
 build_from:
-  amd64: ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.21
-  aarch64: ghcr.io/home-assistant/aarch64-base-python:3.12-alpine3.21
-  armv7: ghcr.io/home-assistant/armv7-base-python:3.12-alpine3.21
+  amd64: ghcr.io/home-assistant/amd64-base-python:3.12-alpine3.24
+  aarch64: ghcr.io/home-assistant/aarch64-base-python:3.12-alpine3.24
+  armv7: ghcr.io/home-assistant/armv7-base-python:3.12-alpine3.24
